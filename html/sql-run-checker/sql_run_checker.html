@@ -1,0 +1,1402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SQL Run Checker</title>
+<style>:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1c1a;--muted:#6a6963;--line:#e3e1da;--soft:#f1efe9;--accent:#2b62d9;--accent-soft:#e8eefc;--accent2:#C99230;--err:#b4232a;--err-soft:#fbeaea;--warn:#a6561a;--warn-soft:#fcf1e6;--info:#4a5a73;--info-soft:#eef1f6;--ok:#2f7a45;--ok-soft:#e8f4ec;--mono:ui-monospace,"Roboto Mono",SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141413;--panel:#1d1d1b;--ink:#ecebe5;--muted:#9d9b93;--line:#34332f;--soft:#262623;--accent:#7ea6ff;--accent-soft:#1e2a45;--err:#ff8a8a;--err-soft:#3a1c1c;--warn:#f2a374;--warn-soft:#3a2417;--info:#a9b8d0;--info-soft:#1f2531;--ok:#8fd3a5;--ok-soft:#1b2e22}}
+:root[data-theme="dark"]{--bg:#141413;--panel:#1d1d1b;--ink:#ecebe5;--muted:#9d9b93;--line:#34332f;--soft:#262623;--accent:#7ea6ff;--accent-soft:#1e2a45;--err:#ff8a8a;--err-soft:#3a1c1c;--warn:#f2a374;--warn-soft:#3a2417;--info:#a9b8d0;--info-soft:#1f2531;--ok:#8fd3a5;--ok-soft:#1b2e22}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,Roboto,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--accent);cursor:pointer;text-decoration:none}a:hover{text-decoration:underline}
+code,pre{font-family:var(--mono);font-size:12.5px}
+code{background:var(--soft);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+button,select{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 11px;border-radius:7px;cursor:pointer}
+button:hover{border-color:var(--accent)}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.in{font:inherit;width:100%;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:7px;padding:7px 9px}
+.muted{color:var(--muted)}.hidden{display:none!important}
+.hero{position:relative;height:220px;overflow:hidden;border-radius:0 0 18px 18px;background:var(--soft)}
+.scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+.band{position:relative;height:40px;overflow:hidden}.band .scene{object-position:center bottom}
+.hero-t{position:absolute;left:22px;right:22px;top:22px;color:#1E2733;max-width:540px}
+.hero-t h1{font-family:"Noto Serif",Georgia,serif;font-size:27px;margin:0 0 4px;font-weight:600}
+.hero-t p{margin:0;font-size:14px;opacity:.85}
+.sky-dark .hero-t{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+#landing{max-width:760px;margin:0 auto 8vh}
+.lbody{padding:18px 16px 0}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:30px 18px;text-align:center;background:var(--panel)}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop .btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.lrow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-top:12px;font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 12px}
+.cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px}
+.cats .card{margin:0;font-size:13px}.cats b{display:block;margin-bottom:2px}
+header.top{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
+.brand{font-family:"Noto Serif",Georgia,serif;font-weight:600;font-size:16px;margin-right:4px}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap}nav.tabs button{border-color:transparent;background:transparent}
+nav.tabs button.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.spacer{flex:1}.actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.status{border-radius:12px;padding:16px 18px;margin-bottom:12px;border:1px solid var(--line);background:var(--panel)}
+.status h2{margin:0 0 4px;font-size:19px}
+.status.ok{background:var(--ok-soft);border-color:var(--ok)}.status.ok h2{color:var(--ok)}
+.status.bad{background:var(--err-soft);border-color:var(--err)}.status.bad h2{color:var(--err)}
+.status.meh{background:var(--warn-soft);border-color:var(--warn)}.status.meh h2{color:var(--warn)}
+.runs{margin:8px 0 0;padding-left:18px;font-size:13px}.runs li{margin:2px 0}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 11px;background:var(--panel);font-size:13px;cursor:pointer;user-select:none}
+.chip input{margin:0;accent-color:var(--accent)}
+.chip.e{color:var(--err)}.chip.w{color:var(--warn)}.chip.i{color:var(--info)}
+.filters .in{max-width:260px}
+.fgroup{margin:0 0 14px}
+.fhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 6px;font-weight:600;overflow-wrap:anywhere}
+.fhead .cnt{font-weight:400;font-size:12px}
+.iss{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 8px}
+.iss.error{border-left-color:var(--err)}.iss.warn{border-left-color:var(--warn)}.iss.info{border-left-color:var(--info)}
+.ihead{display:flex;gap:8px;align-items:flex-start}
+.ihead .t{flex:1;font-weight:600;overflow-wrap:anywhere}
+.pill{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;white-space:nowrap;margin-top:2px}
+.pill.error{background:var(--err-soft);color:var(--err)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.info{background:var(--info-soft);color:var(--info)}
+.loc{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;margin-top:2px}
+.idet{margin:4px 0 0;font-size:13.5px}
+.fix{margin:6px 0 0;font-size:13.5px}.fix b{color:var(--ok)}
+.iact{display:flex;gap:8px;margin-top:6px;font-size:12.5px}
+.iact button{padding:2px 9px;font-size:12px}
+.snip{margin:8px 0 0;background:var(--soft);border-radius:7px;padding:6px 0;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.5}
+.snip div{white-space:pre;padding:0 10px 0 0;display:flex}
+.snip .n{display:inline-block;min-width:42px;text-align:right;padding-right:10px;color:var(--muted);user-select:none;flex:none}
+.snip .hl{background:color-mix(in srgb,var(--warn) 18%,transparent)}
+.snip .caret{color:var(--err);font-weight:700}
+details.ign{margin-top:18px}details.ign summary{cursor:pointer;color:var(--muted)}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;background:var(--soft)}
+.tw{overflow-x:auto}
+td.fn{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere;min-width:220px}
+.yes{color:var(--ok);font-weight:600}.no{color:var(--muted)}
+.rules h3{margin:20px 0 8px;font-size:15px}.rules .r{padding:8px 0;border-bottom:1px solid var(--line)}.rules .r:last-child{border-bottom:0}
+.rules .r b{display:block}.rules .r span{font-size:13px;color:var(--muted)}
+.banner{position:sticky;top:0;z-index:30;background:var(--accent);color:#fff;padding:8px 16px;font-size:13px;text-align:center}.banner.err{background:var(--err)}
+.sheet{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center;padding:16px}
+.sheet .card{width:100%;max-width:520px;margin:0}
+.row-end{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.themeSel{padding:4px 6px;font-size:12px}
+.busy{display:flex;gap:10px;align-items:center;justify-content:center;padding:30px;color:var(--muted)}
+@media (max-width:700px){header.top{position:static}.loc{display:none}.ihead{flex-wrap:wrap}}
+@media print{.band,header.top,.iact,.filters{display:none}}
+</style>
+</head>
+<body>
+<div id="banner" class="banner hidden"></div>
+<div id="landing">
+  <div class="hero"><img class="scene" alt=""><div class="hero-t"><h1>SQL Run Checker</h1><p>Catch the small mistakes before the run does.</p></div></div>
+  <div class="lbody">
+    <p class="muted" style="margin:0 0 14px">Drop in your workflow folder after every change. It reads <code>raya*.py</code>, the config files and every <code>.sql</code> the same way <code>run_sql_folder()</code> does, and lists anything that would stop a script from running. It never judges your logic.</p>
+    <div class="drop" id="drop">
+      <p style="margin:0 0 6px;font-weight:600">Drop the folder (or a .zip of it) here</p>
+      <p class="muted" style="margin:0 0 14px;font-size:13px">Reads .sql, .py and .txt files. Nothing is uploaded.</p>
+      <div class="btns"><button class="primary" id="pickDir">Choose folder</button><button id="pickFiles">Choose files or .zip</button></div>
+      <input type="file" id="dirIn" webkitdirectory directory multiple hidden>
+      <input type="file" id="filesIn" multiple accept=".sql,.py,.txt,.md,.zip" hidden>
+    </div>
+    <p id="lmsg" class="hidden" style="color:var(--err);margin:10px 0 0"></p>
+    <div class="lrow"><span><button class="impSet">Import settings</button> <button class="expSet">Export settings</button></span><label class="muted">Theme <select class="themeSel"></select></label></div>
+    <div class="cats">
+      <div class="card"><b>Python</b>Commas, brackets, quotes, indentation in raya.py, output.py, debug.py, refresh_list.py, standalone.py.</div>
+      <div class="card"><b>Replacements</b>sql_var items that replace nothing, twice, or inside longer words; placeholders left behind.</div>
+      <div class="card"><b>SQL</b>Dangling AND/OR/commas, unclosed brackets, missing ON, CTE and UNION mistakes, Oracle vs Spark syntax.</div>
+      <div class="card"><b>Between scripts</b>Views read before they exist, output tables without af_mon., partition columns, file names.</div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:14px">Works offline. Your list of ignored warnings is saved in this browser; use Export settings to keep a copy.</p>
+  </div>
+</div>
+<div id="app" class="hidden">
+  <div class="band"><img class="scene" alt=""></div>
+  <header class="top">
+    <span class="brand">SQL Run Checker</span>
+    <nav class="tabs" id="tabs"><button data-tab="report" class="on">Report</button><button data-tab="plan">Run order</button><button data-tab="rules">Rules</button></nav>
+    <span class="spacer"></span>
+    <div class="actions">
+      <button class="primary" id="recheck">Check a folder</button>
+      <button id="expRep">Export report</button>
+      <button id="copyRep">Copy report</button>
+      <button class="impSet">Import settings</button>
+      <button class="expSet">Export settings</button>
+      <select class="themeSel" title="Theme"></select>
+    </div>
+  </header>
+  <main id="main"></main>
+</div>
+<input type="file" id="setIn" accept=".json,application/json" hidden>
+<div id="sheet" class="sheet hidden"><div class="card" id="sheetc"></div></div>
+<script>
+'use strict';
+/* ===== Python tokenizer + parser (syntax check and literal reading) =====
+   Reports the first syntax error the way Python would, plus a few "valid but
+   probably a typo" warnings (implicit string joins in lists, duplicate dict keys). */
+const PY_KW=new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' '));
+const PY_OPS=['**=','//=','>>=','<<=','...','->',':=','**','//','>>','<<','<=','>=','==','!=','+=','-=','*=','/=','%=','&=','|=','^=','@=','+','-','*','/','%','@','&','|','^','~','<','>','(',')','[',']','{','}',',',':','.',';','='];
+const PY_CLOSE={')':'(',']':'[','}':'{'};
+class PySyntaxError extends Error{constructor(msg,line,col,hint){super(msg);this.line=line;this.col=col;this.hint=hint||'';}}
+
+function pyTokenize(src){
+  const toks=[],brackets=[],indents=[0];
+  let i=0,line=1,col=0,atStart=true,n=src.length,sawTab=false,sawSpace=false;
+  const err=(m,l,c,h)=>{throw new PySyntaxError(m,l==null?line:l,c==null?col:c,h);};
+  const push=(t,v,l,c,extra)=>{const o={t,v,line:l,col:c};if(extra)Object.assign(o,extra);toks.push(o);return o;};
+  const adv=k=>{for(let j=0;j<k;j++){if(src[i]==='\n'){line++;col=0;}else col++;i++;}};
+  if(src.charCodeAt(0)===0xFEFF)i=1;
+  while(i<n){
+    if(atStart&&!brackets.length){
+      // measure indentation
+      let w=0,j=i,tabs=false,spaces=false;
+      while(j<n&&(src[j]===' '||src[j]==='\t'||src[j]==='\f')){if(src[j]==='\t'){w=(Math.floor(w/8)+1)*8;tabs=true;}else if(src[j]===' '){w++;spaces=true;}j++;}
+      const ch=src[j];
+      if(j>=n)break;
+      if(ch==='\n'||ch==='#'||(ch==='\r'&&src[j+1]==='\n')){ // blank or comment line
+        adv(j-i);
+        if(ch==='#'){while(i<n&&src[i]!=='\n')adv(1);}
+        if(src[i]==='\r')adv(1);
+        if(src[i]==='\n')adv(1);
+        continue;
+      }
+      if(ch==='\\'&&(src[j+1]==='\n'||src[j+1]==='\r')){adv(j-i);adv(src[j+1]==='\r'?3:2);continue;}
+      if(tabs)sawTab=true;if(spaces)sawSpace=true;
+      adv(j-i);
+      const top=indents[indents.length-1];
+      if(w>top){
+        if(!toks.length||toks[toks.length-1].t!=='newline'||!toks.length)err('unexpected indent',line,0,'This line is indented more than the line before it, but the line before doesn\u2019t end with ":".');
+        indents.push(w);push('indent','',line,0);
+      }else if(w<top){
+        while(indents.length&&w<indents[indents.length-1]){indents.pop();push('dedent','',line,0);}
+        if(w!==indents[indents.length-1])err('unindent does not match any outer indentation level',line,0,'The indentation of this line doesn\u2019t line up with any block above it. Check spaces vs tabs.');
+      }
+      atStart=false;
+    }
+    const c=src[i];
+    if(c==='\n'){
+      if(!brackets.length){const last=toks[toks.length-1];if(last&&last.t!=='newline'&&last.t!=='indent'&&last.t!=='dedent')push('newline','',line,col);atStart=true;}
+      adv(1);continue;
+    }
+    if(c===' '||c==='\t'||c==='\f'||c==='\r'){adv(1);continue;}
+    if(c==='#'){while(i<n&&src[i]!=='\n')adv(1);continue;}
+    if(c==='\\'){
+      if(src[i+1]==='\n'){adv(2);continue;}
+      if(src[i+1]==='\r'&&src[i+2]==='\n'){adv(3);continue;}
+      err('unexpected character after line continuation character',line,col,'A backslash "\\" must be the last character on the line.');
+    }
+    // strings (with prefixes)
+    const pm=/^([rRbBuUfF]{0,2})(['"])/.exec(src.slice(i,i+4));
+    if(pm&&(pm[1]===''||/^(r|u|f|b|br|rb|fr|rf)$/i.test(pm[1]))){
+      const q=pm[2],sl=line,sc=col,pre=pm[1].toLowerCase();
+      const tri=src.substr(i+pm[1].length,3)===q+q+q;
+      let j=i+pm[1].length+(tri?3:1);const startBody=j;
+      let fdepth=0;const isF=pre.includes('f');
+      for(;;){
+        if(isF&&j<n){
+          const ch0=src[j];
+          if(ch0==='{'){if(src[j+1]==='{'&&fdepth===0){j+=2;continue;}fdepth++;j++;continue;}
+          if(ch0==='}'&&fdepth>0){fdepth--;j++;continue;}
+          if(fdepth>0&&(ch0==='"'||ch0==="'")){const qq=ch0;let k=j+1;while(k<n&&src[k]!==qq&&src[k]!=='\n'){if(src[k]==='\\')k++;k++;}j=k+1;continue;}
+        }
+        if(j>=n)err(tri?'unterminated triple-quoted string literal (started on line '+sl+')':'unterminated string literal',sl,sc,tri?'A string that starts with '+q+q+q+' is never closed.':'This string has no closing '+q+' on the same line.');
+        const ch=src[j];
+        if(ch==='\\'){j+=2;continue;}
+        if(!tri&&ch==='\n')err('unterminated string literal',sl,sc,'This string has no closing '+q+' on the same line. Did you forget a quote?');
+        if(tri?src.substr(j,3)===q+q+q:ch===q)break;
+        j++;
+      }
+      const body=src.slice(startBody,j);j+=tri?3:1;
+      let v=body;
+      if(!pre.includes('r'))v=body.replace(/\\(\r?\n|\\|'|"|n|t|r|0)/g,(m,x)=>x==='n'?'\n':x==='t'?'\t':x==='r'?'\r':x==='0'?'\0':/\n/.test(x)?'':x);
+      push('str',v,sl,sc,{f:pre.includes('f'),b:pre.includes('b'),endLine:null});
+      adv(j-i);toks[toks.length-1].endLine=line;continue;
+    }
+    const nm=/^(?:0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?\d[\d_]*)?[jJ]?)/.exec(src.slice(i,i+80));
+    if(nm&&/[\d.]/.test(c)&&!(c==='.'&&!/\d/.test(src[i+1]||''))){
+      const after=src[i+nm[0].length]||'';
+      if(/[A-Za-z_]/.test(after))err('invalid decimal literal',line,col,'A number is directly followed by letters. Is a space or operator missing?');
+      push('num',nm[0],line,col);adv(nm[0].length);continue;
+    }
+    const idm=/^[A-Za-z_\u00A0-\uFFFF][\w\u00A0-\uFFFF]*/.exec(src.slice(i,i+200));
+    if(idm){push(PY_KW.has(idm[0])?'kw':'name',idm[0],line,col);adv(idm[0].length);continue;}
+    let op=null;for(const o of PY_OPS){if(src.startsWith(o,i)){op=o;break;}}
+    if(!op){
+      if(c==='!')err('invalid syntax: "!" on its own',line,col,'Python uses "not" or "!=" \u2014 a single "!" is not valid.');
+      err('invalid character '+JSON.stringify(c),line,col,c==='$'?'"$" is not valid in Python code. Is it meant to be inside a string?':c==='`'?'Backticks are not valid in Python.':'This character is not valid in Python code.');
+    }
+    if('([{'.includes(op))brackets.push({ch:op,line,col});
+    else if(')]}'.includes(op)){
+      const top=brackets.pop();
+      if(!top)err('unmatched \''+op+'\'',line,col,'There is a closing "'+op+'" with no opening bracket before it.');
+      if(top.ch!==PY_CLOSE[op])err('closing parenthesis \''+op+'\' does not match opening parenthesis \''+top.ch+'\''+(top.line!==line?' on line '+top.line:''),line,col,'Brackets are mixed up: "'+top.ch+'" (line '+top.line+') is closed with "'+op+'".');
+    }
+    push('op',op,line,col);adv(op.length);
+  }
+  if(brackets.length){const b=brackets[brackets.length-1];err('\''+b.ch+'\' was never closed',b.line,b.col,'The "'+b.ch+'" opened on line '+b.line+' has no matching "'+({'(':')','[':']','{':'}'})[b.ch]+'".');}
+  const last=toks[toks.length-1];
+  if(last&&last.t!=='newline'&&last.t!=='dedent')push('newline','',line,col);
+  while(indents.length>1){indents.pop();push('dedent','',line,0);}
+  push('eof','',line,col);
+  return {toks,mixedIndent:sawTab&&sawSpace};
+}
+
+/* ---------- parser ---------- */
+function pyParse(src){
+  const res={ok:true,error:null,warnings:[],body:[]};
+  let T;
+  try{const tk=pyTokenize(src);T=tk.toks;if(tk.mixedIndent)res.warnings.push({line:1,msg:'This file mixes tabs and spaces for indentation.',hint:'Python may read the indentation differently from how it looks. Use spaces only.'});}
+  catch(e){if(e instanceof PySyntaxError){res.ok=false;res.error=e;return res;}throw e;}
+  let p=0;
+  const peek=(k)=>T[p+(k||0)];
+  const at=(t,v)=>{const x=T[p];return x.t===t&&(v===undefined||x.v===v);};
+  const isOp=v=>at('op',v),isKw=v=>at('kw',v);
+  const desc=x=>x.t==='eof'?'end of file':x.t==='newline'?'end of line':x.t==='indent'?'an indented line':x.t==='dedent'?'end of block':x.t==='str'?'a string':x.t==='num'?'a number':'"'+x.v+'"';
+  const fail=(msg,tok,hint)=>{tok=tok||T[p];throw new PySyntaxError(msg,tok.line,tok.col,hint);};
+  const next=()=>T[p++];
+  const expectOp=(v,ctx,hint)=>{if(isOp(v))return next();fail('expected "'+v+'"'+(ctx?' '+ctx:'')+' but found '+desc(T[p]),T[p],hint);};
+  const startsExpr=x=>x.t==='name'||x.t==='num'||x.t==='str'||(x.t==='op'&&['(','[','{','-','+','~','*','**','...'].includes(x.v))||(x.t==='kw'&&['None','True','False','not','lambda','await','yield'].includes(x.v));
+  const N=(k,tok,o)=>Object.assign({k,line:tok.line,col:tok.col},o||{});
+
+  function file(){
+    const body=[];
+    while(!at('eof')){if(at('newline')){next();continue;}if(at('indent'))fail('unexpected indent',T[p],'This line is indented but nothing above it opens a block.');body.push(...stmt());}
+    return body;
+  }
+  function suite(){
+    if(at('newline')){next();if(!at('indent'))fail('expected an indented block',T[p],'The line before ends with ":", so the next line must be indented.');next();
+      const b=[];while(!at('dedent')&&!at('eof')){if(at('newline')){next();continue;}b.push(...stmt());}if(at('dedent'))next();return b;}
+    return simpleStmts();
+  }
+  function stmt(){
+    const x=T[p];
+    if(x.t==='kw'){
+      switch(x.v){
+        case 'if':{next();namedTest();if(isOp('='))fail('"=" assigns a value; to compare inside "if" use "=="',T[p]);expectOp(':','after the if condition','Every "if" line must end with ":".');const b=suite();const o=N('If',x,{body:b,orelse:[]});
+          while(isKw('elif')){next();namedTest();expectOp(':','after elif');o.orelse.push(...suite());}
+          if(isKw('else')){next();expectOp(':','after else');o.orelse.push(...suite());}return [o];}
+        case 'while':{next();namedTest();expectOp(':','after the while condition');const b=suite();if(isKw('else')){next();expectOp(':');suite();}return [N('While',x,{body:b})];}
+        case 'for':{next();targetList();if(!isKw('in'))fail('expected "in" in the for loop but found '+desc(T[p]));next();testList();expectOp(':','at the end of the for line','Every "for" line must end with ":".');const b=suite();if(isKw('else')){next();expectOp(':');suite();}return [N('For',x,{body:b})];}
+        case 'try':{next();expectOp(':','after try');const b=suite();let any=false;
+          while(isKw('except')){any=true;next();if(isOp('*'))next();if(!isOp(':')){test();if(isKw('as')){next();if(!at('name'))fail('expected a name after "as"');next();}else if(isOp(',')){fail('use "except (A, B):" or "except A as e:" \u2014 "except A, B:" is Python 2 syntax');}}expectOp(':','after except');suite();}
+          if(isKw('else')){next();expectOp(':');suite();}
+          if(isKw('finally')){any=true;next();expectOp(':');suite();}
+          if(!any)fail('"try" needs an "except" or "finally" block',T[p]);return [N('Try',x,{body:b})];}
+        case 'with':{next();
+          if(isOp('(')&&parenWithAs()){next();do{if(isOp(')'))break;test();if(isKw('as')){next();target();}}while(isOp(',')&&next());expectOp(')','to close the with items');expectOp(':','at the end of the with line');return [N('With',x,{body:suite()})];}
+          do{test();if(isKw('as')){next();target();}}while(isOp(',')&&next());expectOp(':','at the end of the with line');return [N('With',x,{body:suite()})];}
+        case 'def':return [funcdef()];
+        case 'class':{next();if(!at('name'))fail('expected a class name');next();skipGeneric();if(isOp('(')){next();callArgs(')');}expectOp(':','after the class line');return [N('Class',x,{body:suite()})];}
+        case 'async':{next();if(isKw('def'))return [funcdef()];if(isKw('for')||isKw('with'))return stmt();fail('"async" must be followed by def, for or with');}
+        case 'elif':case 'else':case 'except':case 'finally':fail('"'+x.v+'" without a matching '+(x.v==='elif'||x.v==='else'?'"if" (or the indentation is wrong)':'"try"'),x,'Check that this line is indented the same as the block it belongs to.');
+      }
+    }
+    if(at('name','match')&&lineEndsWithColon()&&!(peek(1).t==='op'&&['=','.','(','[',',',')'].includes(peek(1).v)&&!lineHasTopColonAfter())){return [matchStmt()];}
+    if(at('name','type')&&peek(1).t==='name'&&(peek(2).t==='op'&&(peek(2).v==='='||peek(2).v==='['))){const x=next();while(!at('newline')&&!at('eof'))next();next();return [N('Pass',x)];}
+    if(isOp('@')){while(isOp('@')){next();namedTest();if(!at('newline'))fail('expected end of line after the decorator');next();}if(!(isKw('def')||isKw('class')||isKw('async')))fail('a decorator must be followed by def or class');return stmt();}
+    return simpleStmts();
+  }
+  function lineEndsWithColon(){let d=0;for(let k=p;k<T.length;k++){const t=T[k];if(t.t==='newline'||t.t==='eof')return false;if(t.t==='op'){if('([{'.includes(t.v))d++;else if(')]}'.includes(t.v))d--;else if(t.v===':'&&d===0){const nx=T[k+1];return nx.t==='newline';}}}return false;}
+  function lineHasTopColonAfter(){return true;}
+  function skipToColonNewline(){let d=0;while(!at('eof')){const t=T[p];if(t.t==='op'){if('([{'.includes(t.v))d++;else if(')]}'.includes(t.v))d--;else if(t.v===':'&&d===0&&T[p+1].t==='newline'){next();return;}}if(t.t==='newline')fail('expected ":" at the end of this line',t);next();}}
+  function matchStmt(){const x=next();skipToColonNewline();if(!at('newline'))fail('expected end of line after match');next();if(!at('indent'))fail('expected an indented block of "case" lines');next();
+    while(!at('dedent')&&!at('eof')){if(at('newline')){next();continue;}if(!at('name','case'))fail('expected "case" inside match',T[p]);next();skipToColonNewline();suite();}
+    if(at('dedent'))next();return N('Match',x);}
+  function parenWithAs(){let d=0;for(let k=p;k<T.length;k++){const t=T[k];if(t.t==='op'){if('([{'.includes(t.v))d++;else if(')]}'.includes(t.v)){d--;if(d===0)return T[k+1]&&T[k+1].t==='op'&&T[k+1].v===':'&&false;}}if(t.t==='kw'&&t.v==='as'&&d===1)return true;if(t.t==='newline'||t.t==='eof')return false;}return false;}
+  function skipGeneric(){if(isOp('[')){let d=0;do{if(isOp('['))d++;else if(isOp(']'))d--;next();}while(d>0&&!at('eof'));}}
+  function funcdef(){const x=next();if(!at('name'))fail('expected a function name after def');next();skipGeneric();expectOp('(','after the function name');params(')',true);expectOp(')','to close the parameter list');if(isOp('->')){next();test();}expectOp(':','at the end of the def line','A "def" line must end with ":".');return N('Def',x,{body:suite()});}
+  function params(close,ann){
+    while(!isOp(close)){
+      if(isOp('/')||isOp('*')){next();if(at('name')){next();if(ann&&isOp(':')){next();test();}}}
+      else if(isOp('**')){next();if(!at('name'))fail('expected a name after **');next();if(ann&&isOp(':')){next();test();}}
+      else if(at('name')){next();if(ann&&isOp(':')){next();test();}if(isOp('=')){next();test();}}
+      else fail('invalid parameter: found '+desc(T[p]));
+      if(isOp(','))next();else if(!isOp(close))fail('expected "," or "'+close+'" in the parameter list but found '+desc(T[p]));
+    }
+  }
+  function simpleStmts(){
+    const out=[small()];
+    while(isOp(';')){next();if(at('newline')||at('eof'))break;out.push(small());}
+    if(!at('newline')&&!at('eof')){
+      const x=T[p],prev=T[p-1];
+      if(startsExpr(x)&&prev&&(prev.t==='str'||prev.t==='name'||prev.t==='num'||(prev.t==='op'&&[')',']','}'].includes(prev.v))))fail('invalid syntax: two expressions next to each other',x,'Something is missing between them \u2014 often a comma, an operator, or a closing bracket.');
+      fail('invalid syntax: unexpected '+desc(x),x);
+    }
+    next();return out;
+  }
+  function small(){
+    const x=T[p];
+    if(x.t==='kw'){
+      switch(x.v){
+        case 'pass':case 'break':case 'continue':next();return N('Pass',x);
+        case 'return':next();if(!at('newline')&&!isOp(';'))testListStar();return N('Return',x);
+        case 'raise':next();if(!at('newline')&&!isOp(';')){test();if(isKw('from')){next();test();}}return N('Raise',x);
+        case 'global':case 'nonlocal':next();do{if(!at('name'))fail('expected a name');next();}while(isOp(',')&&next());return N('Global',x);
+        case 'del':next();testList();return N('Del',x);
+        case 'assert':next();test();if(isOp(',')){next();test();}return N('Assert',x);
+        case 'yield':yieldExpr();return N('Expr',x);
+        case 'import':{next();const names=[];do{names.push(dotted());if(isKw('as')){next();if(!at('name'))fail('expected a name after "as"');next();}}while(isOp(',')&&next());return N('Import',x,{names});}
+        case 'from':{next();let mod='';while(isOp('.')||isOp('...')){mod+=next().v;}if(at('name'))mod+=dotted();if(!isKw('import'))fail('expected "import" after "from '+mod+'"');next();
+          if(isOp('*')){next();return N('ImportFrom',x,{mod,names:['*']});}
+          const paren=isOp('(');if(paren)next();const names=[];
+          do{if(paren&&isOp(')'))break;if(!at('name'))fail('expected a name to import but found '+desc(T[p]));names.push(next().v);if(isKw('as')){next();next();}}while(isOp(',')&&next());
+          if(paren)expectOp(')');return N('ImportFrom',x,{mod,names});}
+      }
+    }
+    // expression statement / assignment
+    const first=testListStar();
+    if(isOp('=')){
+      const targets=[first];let value;
+      while(isOp('=')){const eq=next();if(at('newline')||at('eof'))fail('nothing after "="',eq,'An assignment needs a value on the right.');
+        value=isKw('yield')?yieldExpr():testListStar();targets.push(value);}
+      targets.pop();
+      targets.forEach(t=>checkTarget(t));
+      return N('Assign',x,{targets,value});
+    }
+    if(at('op')&&/^(\+|-|\*|\/|\/\/|%|@|&|\||\^|>>|<<|\*\*)=$/.test(T[p].v)){next();checkTarget(first);const value=isKw('yield')?yieldExpr():testList();return N('AugAssign',x,{target:first,value});}
+    if(isOp(':')){next();test();let value=null;if(isOp('=')){next();value=test();}return N('AnnAssign',x,{target:first,value});}
+    return N('Expr',x,{value:first});
+  }
+  function checkTarget(t){
+    if(t.k==='Name'||t.k==='Attr'||t.k==='Sub'||t.k==='Starred')return;
+    if(t.k==='Tuple'||t.k==='List'){t.elts.forEach(checkTarget);return;}
+    fail(t.k==='Const'?'cannot assign to a literal':t.k==='Call'?'cannot assign to a function call':'cannot assign to this expression',t,'The left side of "=" must be a name. Did you mean "==" (compare)?');
+  }
+  function dotted(){if(!at('name'))fail('expected a module name but found '+desc(T[p]));let s=next().v;while(isOp('.')){next();if(!at('name'))fail('expected a name after "."');s+='.'+next().v;}return s;}
+  function yieldExpr(){const x=next();if(isKw('from')){next();test();}else if(!isOp(')')&&!at('newline')&&!isOp('='))testListStar();return N('Other',x);}
+  function targetList(){const t=testListStar(true);return t;}
+  function target(){return orExpr();}
+  function testList(){const x=T[p];const a=test();if(!isOp(','))return a;const elts=[a];while(isOp(',')){next();if(!startsExpr(T[p]))break;elts.push(test());}return N('Tuple',x,{elts});}
+  function testListStar(noIn){const x=T[p];const one=()=>isOp('*')?(next(),N('Starred',x,{v:noIn?orExpr():orExpr()})):(noIn?orExpr():test());
+    const a=one();if(!isOp(','))return a;const elts=[a];while(isOp(',')){next();if(!startsExpr(T[p]))break;elts.push(one());}return N('Tuple',x,{elts});}
+  function namedTest(){if(at('name')&&peek(1).t==='op'&&peek(1).v===':='){const x=next();next();return N('Named',x,{v:test()});}return test();}
+  function test(){
+    const x=T[p];
+    if(isKw('lambda')){next();params(':',false);expectOp(':','in the lambda');return N('Other',x,{v:test()});}
+    const a=orTest();
+    if(isKw('if')){next();orTest();if(!isKw('else'))fail('expected "else" in the "x if cond else y" expression but found '+desc(T[p]),T[p]);next();test();return N('Other',x);}
+    return a;
+  }
+  function orTest(){let a=andTest();while(isKw('or')){const o=next();andTest();a=N('Other',o);}return a;}
+  function andTest(){let a=notTest();while(isKw('and')){const o=next();notTest();a=N('Other',o);}return a;}
+  function notTest(){if(isKw('not')){const x=next();notTest();return N('Other',x);}return comparison();}
+  function comparison(){let a=orExpr();
+    for(;;){
+      if(at('op')&&['<','>','==','>=','<=','!='].includes(T[p].v)){const o=next();if(!startsExpr(T[p]))fail('nothing after "'+o.v+'"',T[p]);orExpr();a=N('Other',o);continue;}
+      if(isKw('in')||isKw('is')){const o=next();if(o.v==='is'&&isKw('not'))next();orExpr();a=N('Other',o);continue;}
+      if(isKw('not')&&peek(1).t==='kw'&&peek(1).v==='in'){const o=next();next();orExpr();a=N('Other',o);continue;}
+      return a;
+    }
+  }
+  function binLevel(ops,nextFn){return function(){let a=nextFn();while(at('op')&&ops.includes(T[p].v)){const o=next();if(!startsExpr(T[p]))fail('nothing after "'+o.v+'"',T[p],'An operator needs a value on both sides.');const b=nextFn();a=N('BinOp',o,{op:o.v,l:a,r:b});}return a;};}
+  function factor(){if(at('op')&&['+','-','~'].includes(T[p].v)){const o=next();const v=factor();return N('Unary',o,{op:o.v,v});}return power();}
+  function power(){if(isKw('await')){next();}const a=atomExpr();if(isOp('**')){const o=next();const b=factor();return N('BinOp',o,{op:'**',l:a,r:b});}return a;}
+  const term=binLevel(['*','/','//','%','@'],factor),arith=binLevel(['+','-'],term),shift=binLevel(['<<','>>'],arith),band=binLevel(['&'],shift),bxor=binLevel(['^'],band);
+  const orExpr=binLevel(['|'],bxor);
+  function atomExpr(){
+    let a=atom();
+    for(;;){
+      if(isOp('(')){const o=next();const r=callArgs(')');a=N('Call',o,{func:a,args:r.args,kws:r.kws,line:a.line,col:a.col});continue;}
+      if(isOp('[')){const o=next();subscripts();expectOp(']','to close the index');a=N('Sub',o,{obj:a,line:a.line,col:a.col});continue;}
+      if(isOp('.')){next();if(!at('name')&&!at('kw'))fail('expected a name after "."',T[p]);const nm=next();a=N('Attr',nm,{obj:a,attr:nm.v,line:a.line,col:a.col});continue;}
+      return a;
+    }
+  }
+  function subscripts(){do{if(isOp(']'))break;if(!isOp(':'))isOp('*')?(next(),orExpr()):test();if(isOp(':')){next();if(!isOp(']')&&!isOp(',')&&!isOp(':'))test();if(isOp(':')){next();if(!isOp(']')&&!isOp(','))test();}}}while(isOp(',')&&next());}
+  function callArgs(close){
+    const args=[],kws=[];const open=T[p-1];
+    while(!isOp(close)){
+      if(isOp(','))fail('extra comma: "," with nothing before it',T[p],'Remove the extra ",".');
+      const x=T[p];
+      if(isOp('*')||isOp('**')){next();args.push(N('Starred',x,{v:test()}));}
+      else if(at('name')&&peek(1).t==='op'&&peek(1).v==='='){const nm=next();next();kws.push({name:nm.v,value:test(),line:nm.line});}
+      else{const v=namedTest();if(isKw('for')||isKw('async')){compFor();}args.push(v);}
+      if(isOp(','))next();
+      else if(!isOp(close))missingSep(close,open);
+    }
+    next();
+    lintStrings(args,'call');
+    return {args,kws};
+  }
+  function missingSep(close,open){
+    const x=T[p];
+    if(x.t==='newline'||x.t==='eof')fail('"'+open.v+'" opened on line '+open.line+' was never closed',open);
+    if(startsExpr(x))fail('missing comma? Expected "," or "'+close+'" but found '+desc(x),x,'Two items are next to each other with nothing between them. Add a "," between them.');
+    fail('expected "," or "'+close+'" but found '+desc(x),x);
+  }
+  function compFor(){while(isKw('for')||isKw('async')){if(isKw('async'))next();next();targetList();if(!isKw('in'))fail('expected "in" in the comprehension');next();orTest();while(isKw('if')){next();orTest();}}}
+  function seq(close,kind,open){
+    // list, tuple, set display; returns elts
+    const elts=[];let first=true;
+    while(!isOp(close)){
+      if(isOp(','))fail(first?'extra comma: "," right after "'+open.v+'"':'extra comma: two commas in a row',T[p],'Remove the extra ",".');
+      const x=T[p];const v=isOp('*')?(next(),N('Starred',x,{v:orExpr()})):namedTest();
+      if(first&&(isKw('for')||isKw('async'))){compFor();if(!isOp(close))fail('expected "'+close+'" after the comprehension but found '+desc(T[p]));next();return {elts:[v],comp:true};}
+      elts.push(v);first=false;
+      if(isOp(','))next();else if(!isOp(close))missingSep(close,open);
+    }
+    next();return {elts};
+  }
+  function atom(){
+    const x=T[p];
+    if(x.t==='name'){next();return N('Name',x,{id:x.v});}
+    if(x.t==='num'){next();return N('Const',x,{v:Number(x.v.replace(/_/g,''))||0});}
+    if(x.t==='str'){
+      const parts=[next()];while(at('str'))parts.push(next());
+      const n=N('Const',x,{v:parts.map(s=>s.v).join(''),str:true,f:parts.some(s=>s.f),parts:parts.length,lines:[...new Set(parts.map(s=>s.line))]});return n;
+    }
+    if(x.t==='kw'&&(x.v==='None'||x.v==='True'||x.v==='False')){next();return N('Const',x,{v:x.v==='None'?null:x.v==='True'});}
+    if(isOp('...')){next();return N('Const',x,{v:'...'});}
+    if(isOp('(')){next();if(isOp(')')){next();return N('Tuple',x,{elts:[]});}
+      if(isKw('yield')){yieldExpr();expectOp(')');return N('Other',x);}
+      const first=isOp('*')?(next(),N('Starred',x,{v:orExpr()})):namedTest();
+      if(isKw('for')||isKw('async')){compFor();expectOp(')','to close the generator');return N('Other',x);}
+      if(isOp(')')){next();return Object.assign({},first,{paren:true});}
+      if(!isOp(','))missingSep(')',x);
+      const elts=[first];while(isOp(',')){next();if(isOp(')'))break;if(isOp(','))fail('extra comma: two commas in a row',T[p]);elts.push(isOp('*')?(next(),N('Starred',x,{v:orExpr()})):namedTest());if(!isOp(',')&&!isOp(')'))missingSep(')',x);}
+      expectOp(')');lintStrings(elts,'tuple');return N('Tuple',x,{elts});}
+    if(isOp('[')){next();const r=seq(']','list',x);if(!r.comp)lintStrings(r.elts,'list');return N(r.comp?'Other':'List',x,{elts:r.elts});}
+    if(isOp('{')){next();return braces(x);}
+    if(x.t==='kw')fail('invalid syntax: "'+x.v+'" can\u2019t be used here',x,x.v==='else'||x.v==='elif'?'Check the indentation and the ":" on the line above.':'');
+    if(x.t==='newline'||x.t==='eof')fail('unexpected end of line \u2014 something is missing',x);
+    if(x.t==='indent')fail('unexpected indent',x,'This line is indented more than the lines around it.');
+    fail('invalid syntax: unexpected '+desc(x),x,x.t==='op'&&x.v===','?'There is a "," with nothing before it.':'');
+  }
+  function braces(open){
+    if(isOp('}')){next();return N('Dict',open,{keys:[],vals:[]});}
+    const keys=[],vals=[],elts=[];let isDict=null,first=true;
+    while(!isOp('}')){
+      if(isOp(','))fail(first?'extra comma: "," right after "{"':'extra comma: two commas in a row',T[p],'Remove the extra ",".');
+      if(isOp('**')){next();orExpr();keys.push(null);vals.push(null);isDict=true;}
+      else{
+        const kx=T[p];const k=isOp('*')?(next(),N('Starred',kx,{v:orExpr()})):namedTest();
+        if(isDict===null)isDict=isOp(':');
+        if(isDict){
+          if(!isOp(':'))fail('expected ":" after the dictionary key but found '+desc(T[p]),T[p],'Each item in a dict is written key: value.');
+          next();const v=test();
+          if(isOp(':')&&v&&v.k==='Const'&&v.parts>1)fail('missing comma? Two strings are joined here, so the next ":" makes no sense',T[p],'Python joined the value and the next key into '+JSON.stringify(v.v)+'. Add a "," after the value on line '+v.line+'.');
+          if(first&&(isKw('for')||isKw('async'))){compFor();expectOp('}');return N('Other',open);}
+          keys.push(k);vals.push(v);
+        }else{
+          if(isOp(':'))fail('unexpected ":" in a set',T[p]);
+          if(first&&(isKw('for')||isKw('async'))){compFor();expectOp('}');return N('Other',open);}
+          elts.push(k);
+        }
+      }
+      first=false;
+      if(isOp(','))next();
+      else if(!isOp('}')){
+        const y=T[p];
+        if(isDict&&startsExpr(y))fail('missing comma? Expected "," or "}" but found '+desc(y),y,'Two dictionary items are next to each other with no "," between them.');
+        missingSep('}',open);
+      }
+    }
+    next();
+    if(isDict){
+      const seen=new Map();
+      keys.forEach((k,i)=>{if(k&&k.k==='Const'&&typeof k.v==='string'){if(seen.has(k.v))res.warnings.push({line:k.line,msg:'Key '+JSON.stringify(k.v)+' appears twice in the same dict.',hint:'Only the last value is kept; the earlier one (line '+seen.get(k.v)+') is silently dropped.'});else seen.set(k.v,k.line);}});
+      return N('Dict',open,{keys,vals});
+    }
+    lintStrings(elts,'set');return N('Set',open,{elts});
+  }
+  function lintStrings(elts,where){
+    elts.forEach(e=>{if(e&&e.k==='Const'&&e.parts>1&&!e.paren)res.warnings.push({line:e.line,msg:'Two strings next to each other in a '+where+' are joined into one: '+JSON.stringify(e.v.length>80?e.v.slice(0,77)+'...':e.v)+'.',hint:'Python joins "a" "b" into "ab". If they were meant to be separate items, a comma is missing'+(e.lines.length>1?' at the end of line '+e.lines[0]:'')+'.',kind:'implicit-concat'});});
+  }
+  try{res.body=file();}
+  catch(e){if(e instanceof PySyntaxError){res.ok=false;res.error=e;}else throw e;}
+  return res;
+}
+
+/* ---------- reading values out of the tree ---------- */
+function pyLit(n){
+  if(!n)return undefined;
+  switch(n.k){
+    case 'Const':return n.v;
+    case 'List':case 'Tuple':case 'Set':{const a=n.elts.map(pyLit);return a.some(x=>x===undefined)?undefined:a;}
+    case 'Dict':{const o={};for(let i=0;i<n.keys.length;i++){if(!n.keys[i])return undefined;const k=pyLit(n.keys[i]),v=pyLit(n.vals[i]);if(k===undefined||v===undefined)return undefined;o[k]=v;}return o;}
+    case 'Unary':{const v=pyLit(n.v);return typeof v==='number'?(n.op==='-'?-v:v):undefined;}
+    default:return undefined;
+  }
+}
+function pyTopAssigns(body){const m=new Map();body.forEach(s=>{if(s.k==='Assign')s.targets.forEach(t=>{if(t.k==='Name')m.set(t.id,s.value);});});return m;}
+if(typeof module!=='undefined')module.exports={pyTokenize,pyParse,pyLit,pyTopAssigns,PySyntaxError};
+
+/* ===== SQL tokenizer + "will it run" checks ===== */
+const SQL_VAR='__SQLVAR__';
+const SQL_KW=new Set(('ALL AND ANTI ANY ARRAY AS ASC AT AUTHORIZATION BETWEEN BOTH BY CASE CAST CHECK CLUSTER COLLATE COLUMN CONNECT CONSTRAINT CREATE CROSS CUBE CURRENT DESC DISTINCT DISTRIBUTE DIV DROP ELSE END ESCAPE EXCEPT EXISTS FALSE FETCH FILTER FIRST FOLLOWING FOR FROM FULL GLOBAL GRANT GROUP GROUPING HAVING IF ILIKE IN INNER INSERT INTERSECT INTERVAL INTO IS JOIN LAST LATERAL LEADING LEFT LIKE LIMIT MINUS NATURAL NOT NULL NULLS OF OFFSET ON ONLY OR ORDER OUTER OVER OVERWRITE PARTITION PIVOT PRECEDING PRIOR QUALIFY RANGE RECURSIVE REGEXP RIGHT RLIKE ROLLUP ROW ROWS SELECT SEMI SET SETS SOME SORT START TABLE TABLESAMPLE THEN TO TRAILING TRUE UNBOUNDED UNION UNKNOWN UNPIVOT USING VALUES VIEW WHEN WHERE WINDOW WITH WITHIN').split(' '));
+const SQL_STOP=new Set('WHERE GROUP ORDER HAVING LIMIT UNION INTERSECT EXCEPT MINUS JOIN INNER LEFT RIGHT FULL CROSS NATURAL ON USING WINDOW QUALIFY FETCH OFFSET CONNECT START PIVOT UNPIVOT LATERAL'.split(' '));
+const SQL_FN_FROM=new Set('EXTRACT TRIM SUBSTRING SUBSTR POSITION OVERLAY'.split(' '));
+
+function sqlTokenize(text,engine){
+  const toks=[],errors=[],n=text.length;let i=0;
+  const push=(t,v,s,e)=>toks.push({t,v,u:t==='w'?v.toUpperCase():v,s,e});
+  while(i<n){
+    const c=text[i],d=text[i+1];
+    if(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'){i++;continue;}
+    if(c==='-'&&d==='-'){while(i<n&&text[i]!=='\n')i++;continue;}
+    if(c==='/'&&d==='*'){const j=text.indexOf('*/',i+2);if(j<0){errors.push({rule:'sql-unclosed-comment',pos:i,msg:'A /* comment is never closed',hint:'Everything after this point is treated as a comment, so the query is cut off. Add the closing */.'});break;}i=j+2;continue;}
+    if(c==="'"||(c==='"'&&engine!=='oracle')){
+      let j=i+1,ok=false;
+      while(j<n){const ch=text[j];if(ch==='\\'&&engine!=='oracle'){j+=2;continue;}if(ch===c){if(text[j+1]===c){j+=2;continue;}ok=true;break;}j++;}
+      if(!ok){errors.push({rule:'sql-unclosed-string',pos:i,msg:'A string that starts with '+c+' is never closed',hint:'Look for a missing '+c+' on this line. Everything after it is read as part of the string.'});break;}
+      push('s',text.slice(i,j+1),i,j+1);i=j+1;continue;
+    }
+    if(c==='"'||c==='`'){
+      const j=text.indexOf(c,i+1);
+      if(j<0){errors.push({rule:'sql-unclosed-string',pos:i,msg:'A quoted name that starts with '+c+' is never closed',hint:'Add the closing '+c+'.'});break;}
+      push('q',text.slice(i,j+1),i,j+1);i=j+1;continue;
+    }
+    if(c==='$'&&d==='{'){const j=text.indexOf('}',i);if(j>0&&j-i<80){push('ph',text.slice(i,j+1),i,j+1);i=j+1;continue;}}
+    let m=/^(?:\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)[LlSsYyDdFf]?/.exec(text.slice(i,i+40));
+    if(m&&/[\d.]/.test(c)&&!(c==='.'&&!/\d/.test(d||''))){push('n',m[0],i,i+m[0].length);i+=m[0].length;continue;}
+    m=/^[A-Za-z_À-￿][\w$#À-￿]*/.exec(text.slice(i,i+200));
+    if(m){push('w',m[0],i,i+m[0].length);i+=m[0].length;continue;}
+    m=/^(?:<=>|<>|!=|>=|<=|\|\||::|->|=>|==|[-+*\/%=<>(),.;:\[\]{}|&^~!?@#$])/.exec(text.slice(i,i+3));
+    if(m){push('p',m[0],i,i+m[0].length);i+=m[0].length;continue;}
+    push('p',c,i,i+1);i++;
+  }
+  return {toks,errors};
+}
+
+function sqlLint(text,engine){
+  // returns {issues:[{sev,rule,pos,msg,hint}], refs:[{name,pos}], ctes:Set, aliases:Set}
+  const out=[],add=(sev,rule,pos,msg,hint)=>out.push({sev,rule,pos,msg,hint:hint||''});
+  const {toks,errors}=sqlTokenize(text,engine);
+  errors.forEach(e=>add('error',e.rule,e.pos,e.msg,e.hint));
+  if(!toks.length){add('error','sql-empty',0,'This file has no SQL in it','An empty query fails. Delete the file or add the query.');return {issues:out,refs:[],ctes:new Set(),aliases:new Set()};}
+  if(errors.length)return {issues:out,refs:[],ctes:new Set(),aliases:new Set()};
+  const T=toks,L=T.length,W=(k,u)=>T[k]&&T[k].t==='w'&&(u===undefined||T[k].u===u),P=(k,v)=>T[k]&&T[k].t==='p'&&T[k].v===v;
+  const isKw=k=>T[k]&&T[k].t==='w'&&SQL_KW.has(T[k].u);
+  const show=k=>!T[k]?'the end of the query':T[k].t==='w'?T[k].v.toUpperCase()===T[k].v||SQL_KW.has(T[k].u)?T[k].u:T[k].v:T[k].v;
+  // ---- brackets
+  const match=new Array(L).fill(-1),depth=new Array(L).fill(0),encl=new Array(L).fill(-1);const st=[];
+  for(let k=0;k<L;k++){
+    depth[k]=st.length;encl[k]=st.length?st[st.length-1]:-1;
+    if(P(k,'(')){st.push(k);}
+    else if(P(k,')')){if(!st.length){add('error','sql-paren',T[k].s,'There is a ")" with no "(" before it','Remove it, or add the missing "(".');}else{const o=st.pop();match[o]=k;match[k]=o;depth[k]=st.length;}}
+  }
+  st.forEach(o=>add('error','sql-paren',T[o].s,'This "(" is never closed','Add the missing ")". Brackets are counted across the whole file, so it may belong to an earlier line.'));
+  // ---- semicolons
+  const semis=[];for(let k=0;k<L;k++)if(P(k,';'))semis.push(k);
+  if(semis.length){
+    const last=semis[semis.length-1],trailingOnly=semis.length===1&&last===L-1;
+    if(engine==='oracle')add('error','sql-semicolon',T[semis[0]].s,'";" in an Oracle script','The Oracle query is sent inside brackets, like "(your query)", so a ";" breaks it. Remove the ";".');
+    else if(trailingOnly)add('warn','sql-semicolon',T[last].s,'The query ends with ";"','The script is run with spark.sql(), which takes one statement. Depending on the Spark version, a trailing ";" can fail. Safer to remove it.');
+    else add('error','sql-semicolon',T[semis[0]].s,'More than one statement in one file (separated by ";")','spark.sql() runs exactly one statement, so this file fails. Split it into separate files or remove the ";".');
+  }
+  // ---- token-pair checks
+  const cmpOps=new Set(['=','<>','!=','>=','<=','<','>','==','<=>']);
+  const badAfterOp=k=>!T[k]||P(k,')')||P(k,',')||P(k,';')||(T[k].t==='w'&&(SQL_STOP.has(T[k].u)||['AND','OR','THEN','ELSE','END','FROM','WHEN','SELECT'].includes(T[k].u))&&!(['LEFT','RIGHT'].includes(T[k].u)&&P(k+1,'(')));
+  const badBeforeOp=k=>!T[k]||P(k,'(')||P(k,',')||(T[k].t==='w'&&['WHERE','AND','OR','ON','HAVING','SELECT','WHEN','THEN','ELSE','BY','NOT'].includes(T[k].u));
+  let generic=0;
+  for(let k=0;k<L;k++){
+    const t=T[k];
+    if(t.t==='w'&&(t.u==='AND'||t.u==='OR')){
+      if(badAfterOp(k+1))add('error','sql-dangling',t.s,'"'+t.u+'" with no condition after it (followed by '+show(k+1)+')','Remove the extra '+t.u+', or finish the condition.');
+      else if(badBeforeOp(k-1)&&!(T[k-1]&&T[k-1].u==='NOT'))add('error','sql-dangling',t.s,'"'+t.u+'" with no condition before it (right after '+show(k-1)+')','Remove the extra '+t.u+'.');
+    }
+    if(t.t==='w'&&['ARRAY','MAP','STRUCT'].includes(t.u)&&P(k+1,'<'))generic++;
+    if(t.t==='p'&&cmpOps.has(t.v)){
+      if(t.v==='<'&&T[k-1]&&T[k-1].t==='w'&&['ARRAY','MAP','STRUCT'].includes(T[k-1].u))continue;
+      if(t.v==='>'&&generic>0){generic--;continue;}
+      if(badAfterOp(k+1))add('error','sql-dangling',t.s,'Nothing after "'+t.v+'" (followed by '+show(k+1)+')','A comparison needs a value on both sides.');
+      else if(badBeforeOp(k-1))add('error','sql-dangling',t.s,'Nothing before "'+t.v+'" (right after '+show(k-1)+')','A comparison needs a value on both sides.');
+    }
+    if(P(k,',')){
+      const nx=T[k+1];
+      if(!nx||P(k+1,')')||P(k+1,',')||P(k+1,';')||(nx.t==='w'&&(SQL_STOP.has(nx.u)||nx.u==='FROM')&&nx.u!=='LATERAL'&&!(['LEFT','RIGHT'].includes(nx.u)&&P(k+2,'('))))
+        add('error','sql-comma',t.s,P(k+1,',')?'Two commas in a row':'Extra comma before '+show(k+1),'Remove the "," at the end of the list.');
+      else if(P(k-1,'(')||W(k-1,'SELECT')||W(k-1,'DISTINCT')||W(k-1,'BY'))
+        add('error','sql-comma',t.s,'Comma right after '+show(k-1),'There is nothing before this ",". Remove it.');
+    }
+    if(t.t==='w'&&t.u==='SELECT'){
+      let j=k+1;if(W(j,'DISTINCT')||W(j,'ALL'))j++;
+      if(!T[j]||W(j,'FROM')||P(j,')')||P(j,';'))add('error','sql-empty-clause',t.s,'SELECT has no columns','Add the columns to select.');
+    }
+    if(t.t==='w'&&t.u==='FROM'&&!fnFrom(k)){
+      const nx=T[k+1];
+      if(!nx||P(k+1,')')||P(k+1,',')||P(k+1,';')||(nx.t==='w'&&SQL_STOP.has(nx.u)&&nx.u!=='LATERAL'))add('error','sql-empty-clause',t.s,'FROM has no table (followed by '+show(k+1)+')','Add the table name after FROM.');
+    }
+    if(t.t==='w'&&(t.u==='WHERE'||t.u==='HAVING'||t.u==='ON')){
+      const nx=T[k+1];
+      if(!nx||P(k+1,')')||P(k+1,';')||(nx.t==='w'&&(SQL_STOP.has(nx.u)||nx.u==='SELECT')&&!(['LEFT','RIGHT'].includes(nx.u)&&P(k+2,'('))))add('error','sql-empty-clause',t.s,t.u+' has no condition (followed by '+show(k+1)+')','Add the condition, or remove the '+t.u+'.');
+    }
+    if(t.t==='w'&&(t.u==='GROUP'||t.u==='ORDER')&&!W(k+1,'BY')&&!(P(k-1,'.'))&&!W(k-1,'WITHIN'))
+      if(!(t.u==='ORDER'&&P(k+1,')'))&&!P(k+1,',')&&!P(k+1,'.')&&!(T[k-1]&&T[k-1].t==='p'&&cmpOps.has(T[k-1].v))&&!(T[k+1]&&T[k+1].t==='p'&&cmpOps.has(T[k+1].v))&&!W(k-1,'AS'))
+        add('error','sql-missing-by',t.s,t.u+' must be followed by BY','Write "'+t.u+' BY".');
+    if(t.t==='w'&&t.u==='IN'&&!W(k-1,'FOR')){
+      if(P(k+1,'(')&&P(k+2,')'))add('error','sql-empty-in',t.s,'IN () has an empty list','An empty IN list fails. Add values, or remove the condition.');
+      else if(!P(k+1,'(')&&!(W(k+1)&&P(k+2,'('))&&!(T[k+1]&&(T[k+1].v===SQL_VAR||T[k+1].t==='ph'))&&!W(k-1,'AS'))add('error','sql-in',t.s,'IN must be followed by "(...)"','Write IN (value1, value2) or IN (SELECT ...).');
+    }
+    if(t.t==='w'&&t.u==='BETWEEN'){
+      let ok=false;for(let j=k+1;j<L;j++){if(depth[j]<depth[k])break;if(depth[j]>depth[k])continue;if(W(j,'AND')){ok=true;break;}if(P(j,',')||P(j,';')||(T[j].t==='w'&&SQL_STOP.has(T[j].u)))break;}
+      if(!ok)add('error','sql-between',t.s,'BETWEEN without AND','Write BETWEEN low AND high.');
+    }
+  }
+  function fnFrom(k){
+    if(W(k-1,'DISTINCT')&&(W(k-2,'IS')||W(k-3,'IS')))return true;
+    // FROM inside EXTRACT( / TRIM( ...
+    for(let j=k-1;j>=0;j--){if(P(j,')')&&match[j]>=0){j=match[j];continue;}if(P(j,'(')){return T[j-1]&&T[j-1].t==='w'&&SQL_FN_FROM.has(T[j-1].u);}if(depth[j]<depth[k])return false;}
+    return false;
+  }
+  // ---- CASE / END balance (per bracket level)
+  {const stack=[];for(let k=0;k<L;k++){if(W(k,'CASE'))stack.push(k);else if(W(k,'END')&&!P(k+1,'(')&&!P(k-1,'.')){if(!stack.length)add('error','sql-case',T[k].s,'END without a matching CASE','Remove the extra END, or add the missing CASE.');else stack.pop();}}
+   stack.forEach(k=>add('error','sql-case',T[k].s,'CASE without END','Every CASE needs a closing END.'));}
+  // ---- JOIN must have ON/USING
+  for(let k=0;k<L;k++){
+    if(!W(k,'JOIN'))continue;
+    if(W(k-1,'CROSS')||W(k-1,'NATURAL')||W(k-2,'NATURAL')||W(k-3,'NATURAL')||W(k+1,'LATERAL'))continue;
+    let ok=false,j=k+1;
+    for(;j<L;j++){
+      if(P(j,'(')&&match[j]>j){j=match[j];continue;}
+      if(depth[j]<depth[k]||P(j,';'))break;
+      if(W(j,'ON')||W(j,'USING')){ok=true;break;}
+      if(T[j].t==='w'&&['JOIN','WHERE','GROUP','ORDER','HAVING','LIMIT','UNION','INTERSECT','EXCEPT','MINUS','INNER','LEFT','RIGHT','FULL','CROSS','WINDOW','QUALIFY'].includes(T[j].u)&&!(['LEFT','RIGHT'].includes(T[j].u)&&P(j+1,'(')))break;
+      if(P(j,','))break;
+    }
+    if(!ok)add('error','sql-join-on',T[k].s,'JOIN without ON','Every JOIN (except CROSS JOIN) needs "ON a.key = b.key" or USING (...).');
+  }
+  // ---- CTE structure
+  for(let k=0;k<L;k++){
+    if(!W(k,'WITH'))continue;
+    if(!(k===0||P(k-1,'(')||P(k-1,';')||W(k-1,'AS')))continue;
+    let j=k+1;if(W(j,'RECURSIVE'))j++;
+    for(let guard=0;guard<200;guard++){
+      if(!T[j]||!(T[j].t==='w'||T[j].t==='q'||(T[j].t==='s'&&T[j].v[0]==='"'))){add('error','sql-cte',T[k].s,'WITH must be followed by "name AS (...)"','Check the CTE definition after WITH.');break;}
+      j++;if(P(j,'(')&&match[j]>j)j=match[j]+1;
+      if(!W(j,'AS')){add('error','sql-cte',T[j]?T[j].s:T[k].s,'Expected AS after the CTE name, found '+show(j),'Each CTE is written: name AS (SELECT ...).');break;}
+      j++;if(!P(j,'(')){add('error','sql-cte',T[j]?T[j].s:T[k].s,'Expected "(" after AS in the CTE, found '+show(j),'Each CTE is written: name AS (SELECT ...).');break;}
+      j=match[j]+1;if(j<=0)break;
+      if(P(j,',')){
+        if(W(j+1,'SELECT')||W(j+1,'INSERT')||P(j+1,'('))add('error','sql-cte',T[j].s,'Comma after the last CTE','Remove the "," before the main SELECT.');
+        else{j++;continue;}
+      }else if(W(j)&&W(j+1,'AS')&&P(j+2,'('))add('error','sql-cte',T[j].s,'Missing comma between two CTEs (before '+show(j)+')','Add a "," after the closing ")" of the previous CTE.');
+      break;
+    }
+  }
+  // ---- select list: missing comma between columns, UNION column counts
+  const branches=[];
+  for(let k=0;k<L;k++){
+    if(!W(k,'SELECT'))continue;
+    const items=[],dk=depth[k];let cur=[],j=k+1;
+    if(W(j,'DISTINCT')||W(j,'ALL'))j++;
+    for(;j<L;j++){
+      if(depth[j]<dk||P(j,';'))break;
+      if(depth[j]===dk&&(W(j,'FROM')||W(j,'WHERE')||W(j,'UNION')||W(j,'INTERSECT')||W(j,'EXCEPT')||W(j,'MINUS')||W(j,'LIMIT')||W(j,'ORDER')||W(j,'GROUP')||W(j,'HAVING')||W(j,'INTO')||W(j,'WINDOW')||W(j,'LATERAL')))break;
+      if(depth[j]===dk&&P(j,',')){items.push(cur);cur=[];continue;}
+      cur.push(j);
+    }
+    items.push(cur);
+    items.forEach(it=>{
+      const top=it.filter(x=>depth[x]===dk);
+      for(let q=1;q<top.length;q++){const x=top[q],pv=top[q-1];
+        if(W(x)&&!SQL_KW.has(T[x].u)&&P(x+1,'.')&&!P(x-1,'.')&&x-1===pv&&((W(pv)&&!SQL_KW.has(T[pv].u))||T[pv].t==='n'||T[pv].t==='s'||T[pv].t==='q'||P(pv,')'))){
+          add('error','sql-missing-comma',T[x].s,'Missing comma before "'+T[x].v+'.'+(T[x+2]?T[x+2].v:'')+'"?','A column name directly follows another value with nothing between them. Add a ",".');return;}}
+      if(top.length<2)return;
+      let tail=0;for(let q=top.length-1;q>=0;q--){const x=top[q];if(T[x].t==='w'&&!SQL_KW.has(T[x].u)&&!P(x-1,'.')&&!P(x+1,'.')&&!P(x+1,'(')&&T[x].v!==SQL_VAR)tail++;else break;}
+      const before=top[top.length-1-tail];
+      const onlyWords=before===undefined;
+      const limit=onlyWords?2:(W(before,'AS')?1:1);
+      if(tail>limit&&!(before!==undefined&&T[before].t==='p'&&!/^[)\]]$/.test(T[before].v)))add('error','sql-missing-comma',T[top[top.length-tail+limit]].s,'Missing comma between columns? "'+top.slice(top.length-tail).map(x=>T[x].v).join(' ')+'"','Words that follow each other in the SELECT list need a "," between them (only one alias is allowed after a column).');
+    });
+    // UNION branches
+    let prev=k-1;while(prev>=0&&P(prev,'('))prev--;
+    branches.push({k,dk,en:encl[k],count:items.length,star:items.some(it=>it.some(x=>P(x,'*')&&!P(x-1,'(')&&(P(x-1,'.')||it.length===1||items.length===1))),dyn:items.some(it=>it.some(x=>T[x].v===SQL_VAR||T[x].t==='ph')),afterSet:W(prev,'UNION')||W(prev,'ALL')||W(prev,'INTERSECT')||W(prev,'EXCEPT')||W(prev,'MINUS')||W(prev,'DISTINCT')});
+  }
+  for(let b=1;b<branches.length;b++){
+    const B=branches[b];if(!B.afterSet)continue;
+    let A=null;for(let a=b-1;a>=0;a--){if(branches[a].dk===B.dk&&branches[a].en===B.en){A=branches[a];break;}}
+    if(!A||A.star||B.star||A.dyn||B.dyn)continue;
+    if(A.count!==B.count)add('error','sql-union-cols',T[B.k].s,'The two sides of the UNION have a different number of columns ('+A.count+' vs '+B.count+')','Every SELECT joined by UNION must return the same number of columns.');
+  }
+  // ---- engine-specific syntax
+  for(let k=0;k<L;k++){
+    const t=T[k];
+    if(engine==='oracle'){
+      if(t.t==='q'&&t.v[0]==='`')add('error','sql-engine',t.s,'Backticks `name` don’t work in Oracle','Use "name" (double quotes) or no quotes in Oracle scripts.');
+      if(W(k,'LIMIT')&&depth[k]>=0&&(T[k+1]&&(T[k+1].t==='n'||T[k+1].v===SQL_VAR)))add('error','sql-engine',t.s,'LIMIT doesn’t exist in Oracle','Use FETCH FIRST n ROWS ONLY, or WHERE ROWNUM <= n.');
+    }else{
+      if(W(k,'SYSDATE')&&!P(k+1,'('))add('error','sql-engine',t.s,'SYSDATE doesn’t exist in Spark SQL','This script runs through spark.sql(). Use current_date() or current_timestamp().');
+      else if(W(k,'ROWNUM'))add('error','sql-engine',t.s,'ROWNUM doesn’t exist in Spark SQL','Use row_number() OVER (...) or LIMIT.');
+      else if(W(k,'DUAL')&&W(k-1,'FROM'))add('error','sql-engine',t.s,'"FROM dual" doesn’t exist in Spark SQL','In Spark you can SELECT without a FROM.');
+      else if(P(k,'(')&&P(k+1,'+')&&P(k+2,')'))add('error','sql-engine',t.s,'Oracle (+) join syntax doesn’t work in Spark SQL','Use LEFT JOIN ... ON ... instead.');
+      else if(W(k,'CONNECT')&&W(k+1,'BY'))add('error','sql-engine',t.s,'CONNECT BY doesn’t exist in Spark SQL','This is Oracle-only syntax.');
+    }
+  }
+  // ---- table references, CTE names, aliases
+  const refs=[],ctes=new Set(),aliases=new Set(),refTok=new Set();
+  for(let k=0;k<L;k++){
+    if(W(k)&&W(k+1,'AS')&&P(k+2,'(')&&(P(k-1,',')||W(k-1,'WITH')||W(k-1,'RECURSIVE')))ctes.add(T[k].v.toLowerCase());
+    if(W(k)&&P(k+1,'(')&&match[k+1]>0&&W(match[k+1]+1,'AS')&&P(match[k+1]+2,'(')&&(P(k-1,',')||W(k-1,'WITH')))ctes.add(T[k].v.toLowerCase());
+  }
+  const readAlias=j=>{if(W(j,'AS'))j++;if(T[j]&&(T[j].t==='w'&&!SQL_KW.has(T[j].u)||T[j].t==='q')){aliases.add(T[j].v.replace(/[`"]/g,'').toLowerCase());j++;if(P(j,'(')&&match[j]>j)j=match[j]+1;}return j;};
+  const readRef=j=>{
+    if(P(j,'(')){j=match[j]>j?match[j]+1:j+1;return readAlias(j);}
+    if(T[j]&&(T[j].t==='w'||T[j].t==='q'||T[j].t==='ph')){
+      const s=j;let name=T[j].v.replace(/[`"]/g,'');refTok.add(j);j++;
+      while(P(j,'.')&&T[j+1]&&(T[j+1].t==='w'||T[j+1].t==='q'||T[j+1].t==='ph')){name+='.'+T[j+1].v.replace(/[`"]/g,'');refTok.add(j+1);j+=2;}
+      if(P(j,'(')&&match[j]>j){j=match[j]+1;return readAlias(j);} // table function
+      if(T[s].t==='w'&&SQL_KW.has(T[s].u)&&!name.includes('.'))return j;
+      refs.push({name:name.toLowerCase(),pos:T[s].s,engineQuoted:T[s].t==='q'});
+      name.toLowerCase().split('.').forEach(x=>aliases.add(x));
+      return readAlias(j);
+    }
+    return j;
+  };
+  for(let k=0;k<L;k++){
+    if(W(k,'FROM')&&!fnFrom(k)){
+      let j=readRef(k+1);
+      while(P(j,',')){j=readRef(j+1);}
+    }else if(W(k,'JOIN')){readRef(k+1);}
+    else if((W(k,'INTO')||W(k,'TABLE')||W(k,'UPDATE'))&&T[k+1]&&(T[k+1].t==='w'||T[k+1].t==='q')&&!SQL_KW.has(T[k+1].u)){const before=refs.length;let j=readRef(k+1);refs.length=before;}
+    else if(W(k,'LATERAL')&&W(k+1,'VIEW')){let j=k+2;if(W(j,'OUTER'))j++;if(W(j)&&P(j+1,'(')&&match[j+1]>0){j=match[j+1]+1;if(W(j)&&!SQL_KW.has(T[j].u))aliases.add(T[j].v.toLowerCase());}}
+    if(W(k,'AS')&&T[k+1]&&T[k+1].t==='w')aliases.add(T[k+1].v.toLowerCase());
+    if(P(k,')')&&W(k+1)&&!SQL_KW.has(T[k+1].u))aliases.add(T[k+1].v.toLowerCase());
+    if(P(k,'->')&&W(k-1))aliases.add(T[k-1].v.toLowerCase());
+    if(P(k,'->')&&P(k-1,')')){for(let j=match[k-1]+1;j<k-1;j++)if(W(j))aliases.add(T[j].v.toLowerCase());}
+  }
+  ctes.forEach(c=>aliases.add(c));
+  // ---- unknown alias prefixes  x.col
+  const seenUnknown=new Set();
+  for(let k=0;k<L;k++){
+    if(!(W(k)&&P(k+1,'.')&&T[k+2]&&(T[k+2].t==='w'||T[k+2].t==='q'||P(k+2,'*'))))continue;
+    if(P(k-1,'.')||refTok.has(k)||T[k].v===SQL_VAR)continue;
+    const a=T[k].v.toLowerCase();
+    if(aliases.has(a)||SQL_KW.has(T[k].u)||seenUnknown.has(a))continue;
+    seenUnknown.add(a);
+    add('warn','sql-alias',T[k].s,'"'+T[k].v+'." is not a table or alias defined in this query','Check the alias spelling. (If '+T[k].v+' is a struct column, you can ignore this.)');
+  }
+  // ---- placeholders left
+  for(const t of T){
+    if(t.t==='ph')add('error','sql-placeholder',t.s,'Placeholder '+t.v+' was not replaced','No sql_var entry replaces it, so the raw text reaches the database and fails.');
+    else if(t.t==='s'){const re=/\$\{[^}'"]{1,60}\}/g;let m;while((m=re.exec(t.v)))add('error','sql-placeholder',t.s+m.index,'Placeholder '+m[0]+' was not replaced (inside a string)','No sql_var entry replaces it, so the query uses the literal text '+m[0]+' and fails or returns nothing.');}
+  }
+  return {issues:out,refs,ctes,aliases};
+}
+if(typeof module!=='undefined')module.exports={sqlTokenize,sqlLint,SQL_VAR,SQL_KW};
+
+/* ===== Workflow rules: mirrors run_sql_folder() in sachGiaoKhoa.py ===== */
+const WF={
+  configs:{debug:'debug.py',refresh:'refresh_list.py',output:'output.py',standalone:'standalone.py'},
+  modes:['production','debug','standalone']
+};
+function lev(a,b){const m=a.length,n=b.length,d=[];for(let i=0;i<=m;i++){d[i]=[i];}for(let j=1;j<=n;j++)d[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[m][n];}
+function lineStarts(t){const ls=[0];for(let i=0;i<t.length;i++)if(t[i]==='\n')ls.push(i+1);return ls;}
+function posToLine(ls,p){let lo=0,hi=ls.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(ls[m]<=p)lo=m;else hi=m-1;}return {line:lo+1,col:p-ls[lo]};}
+function pyCmp(a,b){return a<b?-1:a>b?1:0;}
+
+function checkFolder(files,opts){
+  opts=opts||{};
+  const issues=[];
+  const add=(sev,rule,file,line,title,detail,hint,extra)=>issues.push(Object.assign({sev,rule,file:file||'',line:line||0,title,detail:detail||'',hint:hint||''},extra||{}));
+  const byKey=new Map(files.map(f=>[f.key,f]));
+  const top=files.filter(f=>!f.key.includes('/'));
+  const topNames=new Map(top.map(f=>[f.key,f]));
+  const folder=opts.folder||'';
+  // ---------------- files the runner picks up ----------------
+  const sqlFiles=top.filter(f=>/\.sql$/.test(f.key)&&!f.key.startsWith('.')).sort((a,b)=>pyCmp(a.key,b.key));
+  files.forEach(f=>{
+    if(f.key.includes('/')&&/\.sql$/i.test(f.key))add('info','file-ignored',f.key,0,'Not run: it is in a subfolder','Only .sql files directly in the folder are run.');
+    else if(!f.key.includes('/')&&/\.sql$/i.test(f.key)&&!/\.sql$/.test(f.key))add('warn','file-ignored',f.key,0,'Not run: the extension is "'+f.key.split('.').pop()+'", not ".sql"','The runner looks for "*.sql" in lower case, so this file is skipped.','Rename it to end with .sql.');
+    else if(!f.key.includes('/')&&/\.txt$/i.test(f.key)&&/^\d/.test(f.key)&&/\b(select|with)\b[\s\S]*\bfrom\b/i.test(f.text))add('info','file-ignored',f.key,0,'Not run: SQL saved as .txt','Only .sql files are run. Ignore this if the file is parked on purpose.');
+  });
+  // script records
+  const scripts=sqlFiles.map((f,idx)=>{
+    const parts=f.key.split('_');
+    const source=parts[1]||'';
+    const table=parts.slice(2).join('_').split('.sql').join('');
+    return {f,key:f.key,idx,order:parts[0],source,engine:source==='impala'?'impala':'oracle',table,tl:table.toLowerCase()};
+  });
+  scripts.forEach(s=>{
+    if(s.f.key.split('_').length<3)add('error','file-name',s.key,0,'File name doesn’t follow <order>_<source>_<table_name>.sql','The runner splits the name on "_": part 2 is the engine and the rest is the table name. With fewer parts the table name is empty, so the script fails.','Rename it, e.g. 20290101_impala_my_table.sql.');
+    else{
+      if(s.source!=='impala'&&s.source!=='oracle')add('error','file-engine',s.key,0,'Engine "'+s.source+'" in the file name is not impala or oracle','Anything that isn’t exactly "impala" is sent to Oracle, so this script will run on the wrong database.','Rename the file with _impala_ or _oracle_.'+(lev(s.source.toLowerCase(),'impala')<=2?' (Looks like a typo of "impala".)':lev(s.source.toLowerCase(),'oracle')<=2?' (Looks like a typo of "oracle".)':''));
+      if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(s.table))add('error','file-table',s.key,0,'Table name "'+s.table+'" is not a valid name','It becomes a view or table name, which can only use letters, digits and "_" and must not start with a digit.','Rename the file.');
+      if(!/^\d+$/.test(s.order))add('warn','file-order',s.key,0,'The file name doesn’t start with a number','Files run in alphabetical order of the whole name, so this one may run at an unexpected point.');
+    }
+  });
+  const byTable=new Map();scripts.forEach(s=>{if(!byTable.has(s.tl))byTable.set(s.tl,[]);byTable.get(s.tl).push(s);});
+  byTable.forEach((arr,t)=>{if(arr.length>1)add('warn','dup-table',arr[1].key,0,'Two files build the same table "'+t+'"','Both run: '+arr.map(s=>s.key).join(' and ')+'. The later one replaces the earlier one.','Delete or rename the old copy.');});
+  // ---------------- python files ----------------
+  const py={};
+  const wfPy=k=>/^raya.*\.py$/i.test(k)||Object.values(WF.configs).includes(k)||/^sachgiaokhoa\.py$/i.test(k);
+  top.filter(f=>/\.py$/i.test(f.key)).forEach(f=>{
+    const r=pyParse(f.text);py[f.key]=r;
+    const wf=wfPy(f.key);
+    if(!r.ok){
+      const e=r.error;const sv=wf&&f.key!==WF.configs.standalone?'error':'warn';
+      add(sv,'py-syntax',f.key,e.line,'Python syntax error: '+e.message,
+        f.key===WF.configs.standalone?'The runner reads standalone.py inside try/except, so this error is hidden: standalone mode silently runs nothing.':wf?(/^raya/i.test(f.key)?'The executor won’t start at all.':'The runner exec()s this file, so the whole run stops here.'):'This file isn’t part of the run, but it won’t work either.',e.hint,{col:e.col});
+    }
+    r.warnings.forEach(w=>add('warn',w.kind==='implicit-concat'?'py-concat':'py-warn',f.key,w.line,w.msg,'',w.hint));
+  });
+  // ---------------- config files ----------------
+  const cfgVal=(file,name,required)=>{
+    const f=topNames.get(file);
+    if(!f){if(required)add('error','cfg-missing',file,0,file+' is missing','The runner opens '+file+' at the start of every run, so the run stops with "file not found".');return {missing:true};}
+    const r=py[file];if(!r||!r.ok)return {broken:true};
+    const assigns=pyTopAssigns(r.body);
+    if(!assigns.has(name)){add(file===WF.configs.standalone?'warn':'error','cfg-name',file,1,file+' doesn’t define "'+name+'"','The runner reads the variable "'+name+'" from this file'+(file===WF.configs.standalone?'; without it, standalone mode silently runs nothing.':', so the run stops with KeyError.'),'Make sure the file has a line like '+name+' = ...'+(([...assigns.keys()].length)?' (found: '+[...assigns.keys()].join(', ')+')':''));return {};}
+    const node=assigns.get(name);return {node,val:pyLit(node),line:node.line};
+  };
+  const dbg=cfgVal(WF.configs.debug,'debug',true);
+  const sta=cfgVal(WF.configs.standalone,'standalone',false);
+  const rfl=cfgVal(WF.configs.refresh,'refresh_list',true);
+  const out=cfgVal(WF.configs.output,'output',true);
+  const modeLists={debug:{exact:[],exclude:[],ok:false},standalone:{exact:[],exclude:[],ok:false}};
+  [['debug',dbg,WF.configs.debug],['standalone',sta,WF.configs.standalone]].forEach(([m,c,file])=>{
+    if(!c.node)return;
+    if(c.node.k!=='Dict'){add(m==='debug'?'error':'warn','cfg-shape',file,c.line,'"'+m+'" must be a dict like {"exact_table": [...], "exclude_table": [...]}','The runner calls '+m+'.get(...), which only works on a dict.');return;}
+    const v=c.val||{};
+    ['exact_table','exclude_table'].forEach(k=>{
+      const kv=c.node.keys.findIndex(x=>x&&x.k==='Const'&&x.v===k);
+      if(kv<0)return;
+      const ln=c.node.vals[kv];
+      if(!['List','Tuple','Set'].includes(ln.k)){add('warn','cfg-shape',file,ln.line,'"'+k+'" in '+file+' should be a list of table names','');return;}
+      const arr=(pyLit(ln)||[]).filter(x=>typeof x==='string');
+      modeLists[m][k==='exact_table'?'exact':'exclude']=arr;
+    });
+    const typo=c.node.keys.filter(x=>x&&x.k==='Const'&&typeof x.v==='string'&&!['exact_table','exclude_table'].includes(x.v));
+    typo.forEach(x=>add('warn','cfg-key',file,x.line,'Unknown key "'+x.v+'" in '+file,'The runner only reads "exact_table" and "exclude_table", so this list is ignored.',lev(x.v,'exact_table')<=3?'Did you mean "exact_table"?':lev(x.v,'exclude_table')<=3?'Did you mean "exclude_table"?':''));
+    modeLists[m].ok=true;
+  });
+  let refreshList=[];
+  if(rfl.node){if(!['List','Tuple','Set'].includes(rfl.node.k)&&rfl.val===undefined)add('info','cfg-shape',WF.configs.refresh,rfl.line,'Couldn’t read refresh_list as a plain list','');else refreshList=(rfl.val||[]).filter(x=>typeof x==='string');
+    const seen=new Set();refreshList.forEach(x=>{if(seen.has(x.toLowerCase()))add('info','cfg-dup',WF.configs.refresh,rfl.line,'"'+x+'" is listed twice in refresh_list','Harmless; it is just refreshed twice.');seen.add(x.toLowerCase());});}
+  const outMap=new Map();
+  if(out.node){
+    if(out.node.k!=='List'&&out.node.k!=='Tuple')add('error','cfg-shape',WF.configs.output,out.line,'"output" must be a list of {"T": ..., "C": ...}','The runner loops over it and reads m["T"] and m["C"].');
+    else{
+      if(!out.node.elts.length)add('error','cfg-empty',WF.configs.output,out.line,'"output" is empty','For every script the runner looks up its partition column in this list; with an empty list that lookup crashes (IndexError) and the whole run stops.','Keep at least one entry.');
+      out.node.elts.forEach(e=>{
+        if(e.k!=='Dict'){add('error','cfg-shape',WF.configs.output,e.line,'An item in "output" is not a {"T": ..., "C": ...} dict','The runner reads m["T"] from every item, so the run stops.');return;}
+        const get=k=>{const i=e.keys.findIndex(x=>x&&x.k==='Const'&&x.v===k);return i<0?undefined:e.vals[i];};
+        const T=get('T'),C=get('C');
+        if(!T||!C){add('error','cfg-key',WF.configs.output,e.line,'An item in "output" is missing '+(!T&&!C?'"T" and "C"':!T?'"T"':'"C"'),'The runner reads m["T"] and m["C"] from every item, so the run stops with KeyError.',e.keys.filter(x=>x&&x.k==='Const').map(x=>x.v).filter(k=>k!=='T'&&k!=='C').length?'Found keys: '+e.keys.filter(x=>x&&x.k==='Const').map(x=>JSON.stringify(x.v)).join(', ')+'. Keys are case-sensitive.':'');return;}
+        const t=pyLit(T),c=pyLit(C);
+        if(typeof t!=='string')return;
+        if(outMap.has(t.toLowerCase()))add('warn','cfg-dup',WF.configs.output,e.line,'"'+t+'" is listed twice in output','Only the first partition column is used.');
+        else outMap.set(t.toLowerCase(),{t,c:typeof c==='string'?c:null,line:e.line});
+        if(typeof c==='string'&&!c.trim())add('error','cfg-key',WF.configs.output,e.line,'"'+t+'" has an empty partition column "C"','Writing a table partitioned by "" fails.');
+      });
+    }
+  }
+  outMap.forEach((o,t)=>{if(!byTable.has(t))add('warn','out-unmatched',WF.configs.output,o.line,'"'+o.t+'" in output.py has no matching .sql file','Nothing builds it, so nothing is written for it. Check the spelling against the file names.',nearest(t));});
+  function nearest(t){let best=null,bd=99;byTable.forEach((_,k)=>{const d=lev(k,t);if(d<bd){bd=d;best=k;}});return best&&bd<=Math.max(2,Math.floor(t.length/8))?'Closest file table name: "'+best+'".':'';}
+  // ---------------- executor (raya*.py) ----------------
+  const rayaFiles=top.filter(f=>/^raya.*\.py$/i.test(f.key));
+  const runs=[];const viewsByStep=[];
+  if(!rayaFiles.length)add('info','raya-missing','',0,'No raya*.py found','The checks below assume one production run with no text replacements.');
+  rayaFiles.forEach(f=>{
+    const r=py[f.key];if(!r||!r.ok)return;
+    const env=new Map();
+    const resolve=(n,depth)=>{depth=depth||0;if(!n||depth>8)return undefined;
+      if(n.k==='Const')return typeof n.v==='string'?n.v:undefined;
+      if(n.k==='Name'){const v=env.get(n.id);return v?resolve(v,depth+1):undefined;}
+      if(n.k==='BinOp'&&n.op==='+'){const a=resolve(n.l,depth+1),b=resolve(n.r,depth+1);return a!==undefined&&b!==undefined?a+b:undefined;}
+      return undefined;};
+    const nodeOf=(n,depth)=>{depth=depth||0;if(n&&n.k==='Name'&&env.has(n.id)&&depth<8)return nodeOf(env.get(n.id),depth+1);return n;};
+    const fnName=c=>c.func.k==='Name'?c.func.id:c.func.k==='Attr'?c.func.attr:'';
+    const walk=(n,fn)=>{if(!n||typeof n!=='object')return;if(Array.isArray(n)){n.forEach(x=>walk(x,fn));return;}if(n.k)fn(n);for(const key of ['value','func','args','obj','l','r','v','elts','keys','vals','targets','body','orelse']){if(n[key])walk(n[key],fn);}if(n.kws)n.kws.forEach(kw=>walk(kw.value,fn));};
+    const fileFromPath=p=>{if(typeof p!=='string')return null;const base=p.split('/').pop();
+      const root=runs.length?runs[0].path:resolve({k:'Name',id:'master_path'});
+      if(root){const rt=root.endsWith('/')?root:root+'/';if(p.startsWith(rt))return p.slice(rt.length);if(p.startsWith(root))return p.slice(root.length);}
+      if(!p.includes('/'))return p;
+      if(folder&&p.includes('/'+folder+'/'))return p.split('/'+folder+'/').pop();
+      return byKey.has(base)?base:null;};
+    r.body.forEach((st,si)=>{
+      // calls first (they use env as it is before this statement's assignment)
+      walk(st,n=>{
+        if(n.k!=='Call')return;
+        const name=fnName(n);
+        if(name==='run_sql_folder'){
+          const arg=(i,kw)=>{const k=n.kws.find(x=>x.name===kw);return k?k.value:n.args[i];};
+          const pN=arg(0,'path'),mN=arg(1,'mode'),vN=arg(4,'sql_var');
+          const path=resolve(pN),mode=mN?resolve(mN):undefined;
+          const run={file:f.key,line:n.line,path,mode:mode===undefined?(mN?null:'None'):mode,items:[],sqlVarMissing:!vN,stepIndex:si};
+          if(path!==undefined){
+            if(!path.endsWith('/'))add('error','raya-path',f.key,n.line,'The folder path doesn’t end with "/"','The runner builds file paths as path + "debug.py" and path + "*.sql", so without the "/" it looks in the wrong place and stops.','Add "/" at the end of master_path.');
+            const last=path.replace(/\/+$/,'').split('/').pop();
+            if(folder&&last&&last!==folder)add('warn','raya-folder',f.key,n.line,'The run points at folder "'+last+'", but you loaded "'+folder+'"','The checks use the files you loaded. If the run really uses "'+last+'", you’re checking the wrong folder.');
+          }
+          if(run.mode!==null&&run.mode!=='None'&&!['debug','standalone'].includes(run.mode)&&run.mode!=='production'){
+            const near=['debug','standalone','production'].find(m=>lev(String(run.mode).toLowerCase(),m)<=2);
+            add('warn','raya-mode',f.key,n.line,'mode = "'+run.mode+'" is not production, debug or standalone','Any value other than exactly "debug" or "standalone" runs EVERY script.',near?'Did you mean "'+near+'"? (It is case-sensitive.)':'');
+          }
+          if(!vN)add('error','raya-sqlvar',f.key,n.line,'run_sql_folder is called without sql_var','The runner loops over sql_var to replace text; with None it crashes on the first script.');
+          else{
+            const lst=nodeOf(vN);
+            if(!lst||!['List','Tuple'].includes(lst.k))add('info','raya-sqlvar',f.key,n.line,'Couldn’t read sql_var as a list','Replacement checks are skipped for this run.');
+            else lst.elts.forEach((e,ii)=>{
+              if(e.k!=='Dict'){add('error','raya-sqlvar',f.key,e.line,'sql_var item #'+(ii+1)+' is not a {"from": ..., "to": ...} dict','The runner reads item["from"], so the run stops.');return;}
+              const gi=k=>{const q=e.keys.findIndex(x=>x&&x.k==='Const'&&x.v===k);return q<0?undefined:e.vals[q];};
+              const fr=gi('from'),to=gi('to');
+              if(!fr||!to){add('error','raya-sqlvar',f.key,e.line,'sql_var item #'+(ii+1)+' is missing '+(!fr&&!to?'"from" and "to"':!fr?'"from"':'"to"'),'The runner reads item["from"] and item["to"], so it crashes with KeyError. Keys are case-sensitive.');return;}
+              const frv=resolve(fr);
+              if(fr.k==='Const'&&typeof fr.v!=='string'){add('error','raya-sqlvar',f.key,e.line,'"from" in sql_var item #'+(ii+1)+' is not text','str.replace() needs text here, so the run crashes.');return;}
+              if(frv==='')add('error','raya-sqlvar',f.key,e.line,'"from" in sql_var item #'+(ii+1)+' is an empty string','Replacing "" inserts the value between every character of every script.');
+              let toVal=null,toKind='dynamic',toFile=null;
+              const tn=nodeOf(to);
+              if(tn.k==='Const'&&typeof tn.v==='string'){toVal=tn.v;toKind='text';}
+              else if(tn.k==='Call'&&fnName(tn)==='from_text'){const pth=resolve(tn.args[0]);const rel=fileFromPath(pth);if(rel&&byKey.has(rel)){toVal=byKey.get(rel).text;toKind='file';toFile=rel;}}
+              else if(tn.k==='Call'&&fnName(tn)==='before_6_pm_2_1'){toVal='1=1';toKind='6pm';}
+              run.items.push({from:frv,line:e.line,idx:ii+1,toVal,toKind,toFile});
+            });
+          }
+          runs.push(run);
+        }
+        if(name==='dtc_'||name==='createOrReplaceTempView'){const v=resolve(n.args[0]);if(v)viewsByStep.push({name:v.toLowerCase(),step:si,line:n.line,file:f.key});}
+        if(name==='from_text'){
+          const pth=resolve(n.args[0]);
+          if(pth!==undefined){const rel=fileFromPath(pth);if(rel&&!byKey.has(rel))add('error','raya-file',f.key,n.line,'from_text() reads "'+rel+'", which is not in the folder','That line fails with "file not found".',nearestFile(rel));}
+        }
+        if(name==='replace'&&n.func.k==='Attr'){
+          // from_text(x).replace(a,b)[.replace(c,d)...]
+          let base=n.func.obj,froms=[resolve(n.args[0])];
+          while(base&&base.k==='Call'&&fnName(base)==='replace'&&base.func.k==='Attr'){froms.push(resolve(base.args[0]));base=base.func.obj;}
+          if(base&&base.k==='Call'&&fnName(base)==='from_text'){
+            const rel=fileFromPath(resolve(base.args[0]));
+            if(rel&&byKey.has(rel)&&/\.sql$/.test(rel)){
+              const prevMr=manualReplaces.find(m=>m.file===f.key&&m.line===n.line&&m.target===rel);
+              if(prevMr){froms.forEach(x=>{if(x&&!prevMr.froms.includes(x))prevMr.froms.push(x);});}
+              else manualReplaces.push({file:f.key,line:n.line,target:rel,froms:froms.filter(Boolean)});
+            }
+          }
+        }
+      });
+      if(st.k==='Assign')st.targets.forEach(t=>{if(t.k==='Name')env.set(t.id,st.value);});
+    });
+  });
+  function nearestFile(rel){let best=null,bd=99;byKey.forEach((_,k)=>{const d=lev(k,rel);if(d<bd){bd=d;best=k;}});return best&&bd<=4?'Closest file in the folder: "'+best+'".':'';}
+  if(!runs.length&&rayaFiles.length&&rayaFiles.every(f=>py[f.key]&&py[f.key].ok))add('info','raya-norun',rayaFiles[0].key,0,'No run_sql_folder(...) call found','The checks below assume one production run with no text replacements.');
+  const rayaBroken=rayaFiles.some(f=>py[f.key]&&!py[f.key].ok);
+  if(!runs.length)runs.push({file:'',line:0,path:null,mode:'production',items:[],assumed:true,noVars:rayaBroken,stepIndex:0});
+  if(rayaBroken)add('info','raya-broken','',0,'Text replacements were not checked','The executor has a syntax error, so its sql_var lists couldn\u2019t be read. Fix it and check again.');
+  // ---------------- sql_var item checks per run ----------------
+  const allFroms=new Map();runs.forEach(r=>r.items.forEach(it=>{if(it.from&&!allFroms.has(it.from))allFroms.set(it.from,r);}));
+  runs.forEach((run,ri)=>{
+    const seen=new Map();
+    run.items.forEach((it,ii)=>{
+      if(!it.from)return;
+      if(seen.has(it.from)){add('warn','var-dup',run.file,it.line,'"'+it.from+'" is replaced twice in the same sql_var list','Item #'+seen.get(it.from).idx+' (line '+seen.get(it.from).line+') already replaces every "'+it.from+'", so this one never finds anything to replace.','Delete one of them.');return;}
+      run.items.slice(0,ii).forEach(prev=>{if(prev.from&&prev.from!==it.from&&it.from.includes(prev.from))add('warn','var-order',run.file,it.line,'"'+it.from+'" is broken by an earlier replacement','Item #'+prev.idx+' replaces "'+prev.from+'" first, which is part of "'+it.from+'", so this item never matches.','Move this item above #'+prev.idx+'.');});
+      seen.set(it.from,it);
+    });
+  });
+  // ---------------- simulate each run ----------------
+  const OUT_SET=new Set(outMap.keys());
+  const outBroken=!out.node||out.broken||(py[WF.configs.output]&&!py[WF.configs.output].ok);
+  const linted=new Set(),reported=new Set();
+  const viewsGlobal=new Set();
+  const once=(key,fn)=>{if(reported.has(key))return;reported.add(key);fn();};
+  const runSummaries=[];
+  runs.forEach((run,ri)=>{
+    viewsByStep.filter(v=>v.step<run.stepIndex).forEach(v=>viewsGlobal.add(v.name));
+    const mode=run.mode==='debug'||run.mode==='standalone'?run.mode:'production';
+    const ml=mode==='production'?null:modeLists[mode];
+    const selected=scripts.filter(s=>!ml||(ml.exact.map(x=>x.toLowerCase()).includes(s.tl)&&!ml.exclude.map(x=>x.toLowerCase()).includes(s.tl)));
+    const selSet=new Set(selected);
+    if(ml){
+      const listFile=WF.configs[mode];
+      ml.exact.concat(ml.exclude).forEach(x=>{if(!byTable.has(x.toLowerCase()))once('ml|'+mode+'|'+x,()=>add('warn','mode-unmatched',listFile,0,'"'+x+'" in '+listFile+' matches no .sql file','So it has no effect in '+mode+' mode.',nearest(x.toLowerCase())));});
+      if(!selected.length)add('warn','mode-empty',run.file,run.line,'This '+mode+' run selects no scripts','exact_table in '+listFile+' is empty or matches nothing (after exclude_table), so the run does nothing.');
+    }
+    // how often each item matches, over ALL scripts (the lists are shared between modes)
+    const counts=run.items.map(()=>0);
+    scripts.forEach(s=>{let t=s.f.text;run.items.forEach((it,ii)=>{if(!it.from)return;const c=t.split(it.from).length-1;if(c){counts[ii]+=c;t=t.split(it.from).join(it.toVal!=null?it.toVal:SQL_VAR);}});});
+    const views=new Set(viewsGlobal);
+    const label=mode+(runs.length>1?' run (line '+run.line+')':' run');
+    selected.forEach(s=>{
+      // replacement simulation with position mapping
+      let text=s.f.text;let map=null;
+      run.items.forEach((it,ii)=>{
+        if(!it.from)return;
+        const rep=it.toVal!=null?it.toVal:SQL_VAR;
+        if(!text.includes(it.from))return;
+        let o='',m=[],pos=0,j;
+        if(!map){map=new Int32Array(text.length);for(let q=0;q<text.length;q++)map[q]=q;}
+        while((j=text.indexOf(it.from,pos))>=0){
+          o+=text.slice(pos,j);for(let q=pos;q<j;q++)m.push(map[q]);
+          o+=rep;for(let q=0;q<rep.length;q++)m.push(map[j]);
+          pos=j+it.from.length;
+        }
+        o+=text.slice(pos);for(let q=pos;q<text.length;q++)m.push(map[q]);
+        text=o;map=Int32Array.from(m);
+      });
+      const ls=s.ls||(s.ls=lineStarts(s.f.text));
+      const lineOf=p=>posToLine(ls,map?(map[Math.min(p,map.length-1)]||0):p);
+      const res=sqlLint(text,s.engine);
+      if(!linted.has(s.key)){
+        linted.add(s.key);
+        res.issues.forEach(i=>{if(run.noVars&&i.rule==='sql-placeholder')return;const lc=lineOf(i.pos);add(i.sev,i.rule,s.key,lc.line,i.msg,s.engine==='oracle'?'Oracle script.':'Runs through spark.sql().',i.hint,{col:lc.col});});
+        // oracle: last line is a -- comment with no newline
+        if(s.engine==='oracle'){const lastNl=text.lastIndexOf('\n'),lastLine=text.slice(lastNl+1);if(/--/.test(lastLine.replace(/'[^']*'/g,''))&&!/\n\s*$/.test(text))add('error','sql-oracle-comment',s.key,lineOf(text.length-1).line,'The file ends with a "--" comment and no line break','The Oracle query is sent as "(" + your query + ")". The ")" lands inside your comment, so the query is never closed.','Press Enter after the last line, or remove the comment.');}
+        // leftover placeholders from other runs
+        allFroms.forEach((r2,fr)=>{if(r2===run)return;if(run.items.some(it=>it.from===fr))return;const j=text.indexOf(fr);if(j>=0&&!/^[A-Za-z0-9_]/.test(text[j+fr.length]||'')&&!/[A-Za-z0-9_]$/.test(text.slice(Math.max(0,j-1),j)))add('warn','var-other-run',s.key,lineOf(j).line,'"'+fr+'" is not replaced in the '+label,'Only the other sql_var list (line '+r2.line+') replaces it, so in this run the raw text reaches the database.');});
+        // output partition column
+        const o=outMap.get(s.tl);
+        if(o&&o.c){const hasStar=/select\s+(\w+\.)?\*/i.test(text.replace(/--[^\n]*/g,''));if(!new RegExp('(^|[^A-Za-z0-9_])'+o.c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'($|[^A-Za-z0-9_])','i').test(text)&&!hasStar)add('error','out-partition',s.key,0,'Partition column "'+o.c+'" is not in this query','output.py says "'+o.t+'" is partitioned by "'+o.c+'", but the query never mentions that column, so writing the table fails.','Add the column to the SELECT, or fix "C" in output.py.');}
+      }
+      // dependencies (per run)
+      res.refs.forEach(ref=>{
+        const name=ref.name;if(res.ctes.has(name))return;
+        const ln=lineOf(ref.pos).line;
+        const parts=name.split('.');
+        if(parts.length===1){
+          const prods=byTable.get(name);
+          if(s.engine==='oracle'){
+            if(prods||views.has(name)||viewsByStep.some(v=>v.name===name))once('ora|'+s.key+'|'+name,()=>add('error','dep-oracle-view',s.key,ln,'Oracle can’t read "'+name+'"','"'+name+'" is built by this pipeline as a Spark view (or af_mon table). Oracle scripts run inside Oracle and can’t see it.','Move this logic into an impala script, or read the data from an Oracle table.'));
+            return;
+          }
+          if(prods){
+            const p=prods[0];
+            if(p===s)return;
+            if(outBroken)return;
+            if(OUT_SET.has(name)){once('out|'+s.key+'|'+name,()=>add('error','dep-output-bare',s.key,ln,'"'+name+'" is an output table, so there is no view with that name','Output tables are written to af_mon.'+name+' and no temporary view is created. Reading "'+name+'" without "af_mon." fails.','Write af_mon.'+name+' instead.'));return;}
+            if(views.has(name))return;
+            if(p.idx>s.idx)once('late|'+s.key+'|'+name+'|'+mode,()=>add('error','dep-later',s.key,ln,'"'+name+'" is built later in the run','It is built by '+p.key+', which runs after this script, so the view doesn’t exist yet ('+label+').','Rename the files so the order number of '+p.key+' is smaller.'));
+            else if(!selSet.has(p))once('skip|'+s.key+'|'+name+'|'+mode,()=>add('error','dep-skipped',s.key,ln,'"'+name+'" is not built in the '+label,p.key+' is not selected in '+mode+' mode, and temporary views only exist inside the run, so this fails.','Add "'+p.table+'" to exact_table in '+(WF.configs[mode]||'the list')+'.'));
+            return;
+          }
+          if(views.has(name)||viewsByStep.some(v=>v.name===name))return;
+          once('unk|'+s.key+'|'+name,()=>add('warn','dep-unknown',s.key,ln,'"'+name+'" has no schema and no script builds it','Without a schema, Spark looks for a temporary view or a table in the default database. If neither exists the script fails.',nearest(name)||'Add the schema (e.g. af_mon.'+name+') or check the spelling.'));
+        }else if(parts.length===2&&parts[0]==='af_mon'&&byTable.has(parts[1])){
+          const t=parts[1],p=byTable.get(t)[0];
+          if(s.engine==='oracle'){once('oraafmon|'+s.key+'|'+name,()=>add('error','dep-oracle-view',s.key,ln,'Oracle can’t read "'+name+'"','af_mon is a Hive/Impala schema. Oracle scripts run inside Oracle and can’t see it.'));return;}
+          if(outBroken)return;
+          if(!OUT_SET.has(t)){if(!(p.idx===s.idx))once('nomon|'+s.key+'|'+name,()=>add('warn','dep-not-output',s.key,ln,'"'+name+'" is never written by this pipeline','"'+t+'" is not in output.py, so it only exists as a temporary view called "'+t+'". af_mon.'+t+' is either an old copy or doesn’t exist.','Read "'+t+'" without af_mon., or add it to output.py.'));return;}
+          const isBackup=/_backup$/.test(s.tl)&&(s.tl.replace(/_backup$/,'')===t||s.tl.replace(/_backup$/,'')+'_final'===t);
+          if(!isBackup&&p!==s&&(p.idx>s.idx||!selSet.has(p)))once('prev|'+s.key+'|'+name+'|'+mode,()=>add('info','dep-previous',s.key,ln,'Reads af_mon.'+t+' from the previous run','It is rewritten by '+p.key+(p.idx>s.idx?' later in this run':' which doesn’t run in '+mode+' mode')+', so this script sees yesterday’s data. Fine if intended.'));
+        }
+      });
+      // after this script runs: a view exists only for non-output tables
+      if(!OUT_SET.has(s.tl))views.add(s.tl);
+    });
+    selected.forEach(s=>{if(!OUT_SET.has(s.tl))viewsGlobal.add(s.tl);});
+    // replacements that never matched
+    run.items.forEach((it,ii)=>{if(!it.from)return;if(counts[ii]===0&&!issues.some(x=>x.rule==='var-dup'&&x.line===it.line&&x.file===run.file)&&!issues.some(x=>x.rule==='var-order'&&x.line===it.line&&x.file===run.file))add('warn','var-unused',run.file,it.line,'"'+it.from+'" is not found in any .sql file','This replacement does nothing ('+label+').','Check the spelling against the SQL, or remove the line.');});
+    // partial-word matches
+    run.items.forEach(it=>{
+      if(!it.from||!/^[A-Za-z0-9_]/.test(it.from)||!/[A-Za-z0-9_]$/.test(it.from))return;
+      const esc=it.from.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      const re=new RegExp('[A-Za-z0-9_]*'+esc+'[A-Za-z0-9_]*','g');
+      for(const s of selected){
+        let m;const txt=s.f.text;re.lastIndex=0;
+        while((m=re.exec(txt))){if(m[0]!==it.from){const ln=posToLine(s.ls||(s.ls=lineStarts(txt)),m.index).line;once('part|'+it.from+'|'+m[0],()=>add('warn','var-partial',s.key,ln,'"'+it.from+'" also replaces part of "'+m[0]+'"','The replacement is plain text, so it also changes "'+m[0]+'" into something else (sql_var line '+it.line+' in '+run.file+').','Use a more unique placeholder name, e.g. ${'+it.from+'}.'));break;}}
+      }
+    });
+    runSummaries.push({file:run.file,line:run.line,mode,label,selected:selected.length,total:scripts.length,items:run.items.length,assumed:!!run.assumed,sel:selSet});
+  });
+  // manual from_text(...).replace(...) in raya
+  manualReplaces.forEach(mr=>{
+    const txt=byKey.get(mr.target).text;
+    const missing=[...allFroms.keys()].filter(fr=>!mr.froms.includes(fr)&&txt.includes(fr));
+    if(missing.length)add('warn','raya-manual-replace',mr.file,mr.line,'This line runs '+mr.target+' but only replaces '+mr.froms.map(x=>'"'+x+'"').join(', '),'The file also contains '+missing.map(x=>'"'+x+'"').join(', ')+', which stay as raw text here (sql_var is not applied on this line).','Add .replace(...) for them, or use replace_sql_var(from_text(...), sql_var).');
+  });
+  const plan=scripts.map(s=>({key:s.key,engine:s.engine,source:s.source,table:s.table,output:OUT_SET.has(s.tl),part:(outMap.get(s.tl)||{}).c||'',runs:runSummaries.map(r=>r.sel.has(s))}));
+  runSummaries.forEach(r=>delete r.sel);
+  return {issues,runs:runSummaries,plan,scripts:scripts.length,files:files.length,pyFiles:Object.keys(py).length};
+}
+var manualReplaces=[];
+function runCheck(files,opts){manualReplaces=[];return checkFolder(files,opts);}
+if(typeof module!=='undefined'){const {pyParse,pyLit,pyTopAssigns}=require('./pyparse.js');const {sqlLint,SQL_VAR}=require('./sqlcheck.js');Object.assign(global,{pyParse,pyLit,pyTopAssigns,sqlLint,SQL_VAR});module.exports={runCheck};}
+
+/* ================= Theme (Ghibli misty hills) ================= */
+const THEMES={
+  earth:{sky:['#EBC9A0','#F7E9D4'],ridges:['#E2B88E','#CF946A','#B0704C','#7E4A33'],sun:'#C8452C',acc:'#B0532A',acc2:'#C99230'},
+  forest:{sky:['#C9DFCB','#EFF4E7'],ridges:['#AECBA8','#84AC82','#5C8C61','#3B6948'],sun:'#FFFDF4',acc:'#3B7A4D',acc2:'#C6613A'},
+  sea:{sky:['#B8DCE8','#EDF6F4'],ridges:['#A3CEDC','#74B2C8','#4690B0','#256A8C'],sun:'#FFFFFF',acc:'#1D7898',acc2:'#E0784E'},
+  wind:{sky:['#CFDBF0','#F4F2F8'],ridges:['#C3CEE6','#A6B4D7','#8894C2','#6772A6'],sun:'#FFFFFF',acc:'#4569B3',acc2:'#D9A32E'}
+};
+const PHASES={dawn:{sky:['#EDB9AC','#FAE3CF'],tint:'#F2B3A0',k:.22},dusk:{sky:['#D98A7E','#F4C9A6'],tint:'#6A3E62',k:.42},night:{sky:['#16203D','#34406A'],tint:'#111933',k:.66}};
+const TKEY='sqlcheck.theme';
+function phaseNow(d){const h=(d||new Date()).getHours();return h>=5&&h<8?'dawn':h>=16&&h<19?'dusk':(h>=19||h<5)?'night':'day';}
+function mix(a,b,k){const p=x=>[1,3,5].map(i=>parseInt(x.slice(i,i+2),16));const A=p(a),B=p(b);return '#'+A.map((v,i)=>Math.round(v+(B[i]-v)*k).toString(16).padStart(2,'0')).join('');}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function ridge(yBase,amp,seed,freq,W,H){W=W||800;H=H||440;const r=rng(seed),p=[r()*6,r()*6];let d='M0 '+H+' L';
+  for(let x=0;x<=W;x+=5){const y=yBase-amp*(0.7*Math.sin(x*freq+p[0])+0.3*Math.sin(x*freq*2.1+p[1]));d+=x+' '+y.toFixed(1)+' L';}
+  return d+W+' '+H+'Z';}
+function sceneSvg(name,phase,kind){
+  const T=THEMES[name],P=PHASES[phase];const sky=P?P.sky:T.sky;
+  const rc=T.ridges.map(c=>P?mix(c,P.tint,P.k):c);
+  const band=kind==='band',W=band?1600:800,H=band?100:250;
+  const R=band?[[46,9,.006,11],[60,8,.008,23],[74,7,.011,37],[88,6,.014,51]]:[[128,18,.0085,11],[156,15,.011,23],[184,12,.014,37],[212,10,.018,51]];
+  const sx=band?1380:610,sy=band?(phase==='day'?28:40):(phase==='day'?62:84),sr=band?13:24;
+  let s='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMax slice"><defs><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+sky[0]+'"/><stop offset="1" stop-color="'+sky[1]+'"/></linearGradient><linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".7" stop-color="#fff" stop-opacity="'+(phase==='night'?'.07':'.3')+'"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="'+W+'" height="'+H+'" fill="url(#k)"/>';
+  if(phase==='night'){const r=rng(7);for(let i=0;i<(band?50:36);i++)s+='<circle cx="'+(r()*W).toFixed(0)+'" cy="'+(r()*H*.45).toFixed(0)+'" r="'+(r()*1.1+.4).toFixed(1)+'" fill="#fff" opacity="'+(r()*.5+.4).toFixed(2)+'"/>';
+    s+='<circle cx="'+sx+'" cy="'+sy+'" r="'+sr+'" fill="#F4EFD8"/><circle cx="'+(sx+sr*.45)+'" cy="'+(sy-sr*.3)+'" r="'+(sr*.92)+'" fill="'+mix(sky[0],sky[1],(sy-sr*.3)/H)+'"/>';}
+  else{s+='<circle cx="'+sx+'" cy="'+sy+'" r="'+sr+'" fill="'+T.sun+'" opacity="'+(name==='earth'?1:.92)+'"/>';
+    if(!band)s+='<g fill="none" stroke="'+mix(rc[3],'#000000',.2)+'" stroke-width="1.6" stroke-linecap="round" opacity=".5"><path d="M470 70 q5 -5 10 0 q5 -5 10 0"/><path d="M500 58 q4 -4 8 0 q4 -4 8 0"/><path d="M520 76 q3 -3 6 0 q3 -3 6 0"/></g>';}
+  R.forEach((q,i)=>{s+='<path d="'+ridge(q[0],q[1],q[3],q[2],W,H)+'" fill="'+rc[i]+'"/>';if(i<3)s+='<rect x="0" y="'+(q[0]-q[1]*1.2)+'" width="'+W+'" height="'+(q[1]*2.4)+'" fill="url(#m)"/>';});
+  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s+'</svg>');
+}
+let themeName='earth',themePhase='day';
+function themePref(){try{return localStorage.getItem(TKEY)||'random';}catch(e){return 'random';}}
+function applyTheme(pref){
+  pref=pref||themePref();const names=Object.keys(THEMES);
+  themeName=names.includes(pref)?pref:names[Math.floor(Math.random()*names.length)];themePhase=phaseNow();
+  const T=THEMES[themeName],dark=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches;
+  const acc=dark?mix(T.acc,'#FFFFFF',.35):T.acc,rs=document.documentElement.style;
+  rs.setProperty('--accent',acc);rs.setProperty('--accent-soft',dark?mix(T.acc,'#1d1d1b',.75):mix(T.acc,'#FFFFFF',.88));rs.setProperty('--accent2',T.acc2);
+  const hs=sceneSvg(themeName,themePhase,'hero'),bs=sceneSvg(themeName,themePhase,'band');
+  document.querySelectorAll('img.scene').forEach(i=>i.src=i.closest('.band')?bs:hs);
+  document.body.classList.toggle('sky-dark',themePhase==='dusk'||themePhase==='night');
+  document.querySelectorAll('.themeSel').forEach(sel=>{sel.innerHTML=['random',...names].map(n=>'<option value="'+n+'"'+(n===pref?' selected':'')+'>'+(n==='random'?'Random each visit ('+themeName+')':cap(n))+'</option>').join('');});
+}
+
+
+/* ===== UI ===== */
+const APP_ID='sql-run-checker',SKEY='sqlcheck.v1';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+let state={ignored:{}},storageOk=true,R=null,FILES=null,FOLDER='',CHECKED_AT=null,tab='report';
+let filt={error:true,warn:true,info:false,q:'',group:'file'};
+
+/* ---------- storage ---------- */
+function loadState(){try{const v=localStorage.getItem(SKEY);if(v){const o=JSON.parse(v);state=sanitizeState(o);}}catch(e){storageOk=false;}}
+function saveState(){try{localStorage.setItem(SKEY,JSON.stringify(state));}catch(e){storageOk=false;banner();}}
+function sanitizeState(o){const out={ignored:{}};if(o&&o.ignored&&typeof o.ignored==='object')Object.keys(o.ignored).slice(0,5000).forEach(k=>{const v=o.ignored[k];if(typeof k==='string'&&k.length<600&&v&&typeof v==='object')out.ignored[k]={title:String(v.title||'').slice(0,300),file:String(v.file||'').slice(0,300),at:String(v.at||'').slice(0,40)};});return out;}
+function banner(msg,err){const b=$('#banner');if(!msg&&storageOk){b.classList.add('hidden');return;}b.textContent=msg||'This browser is not letting the page save settings. Use Export settings to keep your ignore list.';b.classList.toggle('err',!!err||!msg);b.classList.remove('hidden');if(msg){clearTimeout(banner.t);banner.t=setTimeout(()=>banner(),2600);}}
+const fp=i=>i.rule+'|'+i.file+'|'+i.title;
+
+/* ---------- reading files: folder, files, or .zip ---------- */
+async function readZip(file){
+  const buf=new Uint8Array(await file.arrayBuffer()),dv=new DataView(buf.buffer);
+  let e=-1;for(let i=buf.length-22;i>=Math.max(0,buf.length-65558);i--){if(dv.getUint32(i,true)===0x06054b50){e=i;break;}}
+  if(e<0)throw new Error('This is not a valid .zip file.');
+  const n=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);const out=[];const dec=new TextDecoder('utf-8');
+  for(let k=0;k<n;k++){
+    if(dv.getUint32(p,true)!==0x02014b50)throw new Error('The .zip file is damaged.');
+    const method=dv.getUint16(p+10,true),csize=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),xl=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),lo=dv.getUint32(p+42,true);
+    const name=dec.decode(buf.subarray(p+46,p+46+nl));p+=46+nl+xl+cl;
+    if(name.endsWith('/')||/(^|\/)(__MACOSX|\.git|\.ipynb_checkpoints|__pycache__)\//.test(name))continue;
+    if(!/\.(sql|py|txt|md)$/i.test(name))continue;
+    const ds=lo+30+dv.getUint16(lo+26,true)+dv.getUint16(lo+28,true);const data=buf.subarray(ds,ds+csize);
+    let bytes;
+    if(method===0)bytes=data;
+    else if(method===8){if(typeof DecompressionStream==='undefined')throw new Error('This browser can’t open .zip files. Choose the folder instead.');bytes=new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());}
+    else continue;
+    out.push({path:name,text:dec.decode(bytes)});
+  }
+  return out;
+}
+async function walkEntry(entry,path,out){
+  if(entry.isFile){await new Promise(r=>entry.file(f=>{out.push({file:f,path:path+f.name});r();},()=>r()));return;}
+  if(entry.isDirectory){const rd=entry.createReader(),all=[];for(;;){const b=await new Promise(r=>rd.readEntries(r,()=>r([])));if(!b.length)break;all.push(...b);}for(const e of all)await walkEntry(e,path+entry.name+'/',out);}
+}
+async function ingest(list){
+  showBusy('Reading files…');
+  try{
+    let items=[];
+    for(const it of list){
+      if(/\.zip$/i.test(it.file.name)){const z=await readZip(it.file);items.push(...z.map(x=>({path:x.path,text:x.text})));continue;}
+      if(!/\.(sql|py|txt|md)$/i.test(it.file.name)||it.file.size>5e6)continue;
+      if(/(^|\/)(\.git|node_modules|__pycache__|\.ipynb_checkpoints|archive)\//.test(it.path))continue;
+      items.push({path:it.path,text:await it.file.text()});
+    }
+    if(!items.some(x=>/\.(sql|py)$/i.test(x.path))){showLanding('No .sql or .py files found there. Choose the folder that has raya.py and the .sql files, or a .zip of it.');return;}
+    // find the folder root: the folder that holds the most .sql files directly
+    const dirs={};items.forEach(x=>{const d=x.path.includes('/')?x.path.slice(0,x.path.lastIndexOf('/')+1):'';if(/\.sql$/i.test(x.path))dirs[d]=(dirs[d]||0)+1;});
+    let root=Object.keys(dirs).sort((a,b)=>dirs[b]-dirs[a]||a.length-b.length)[0];
+    if(root===undefined){const ds=items.map(x=>x.path.includes('/')?x.path.slice(0,x.path.lastIndexOf('/')+1):'');root=ds.sort((a,b)=>a.length-b.length)[0]||'';}
+    FOLDER=root?root.replace(/\/$/,'').split('/').pop():'';
+    FILES=items.filter(x=>x.path.startsWith(root)).map(x=>({key:x.path.slice(root.length),name:x.path.split('/').pop(),text:x.text.replace(/^﻿/,'')}));
+    runNow();
+  }catch(err){showLanding(String(err.message||err));}
+}
+function runNow(){
+  showBusy('Checking '+FILES.length+' files…');
+  setTimeout(()=>{
+    try{R=runCheck(FILES,{folder:FOLDER});CHECKED_AT=new Date();showApp();}
+    catch(err){console.error(err);showApp();$('#main').innerHTML='<div class="card"><h3>Something went wrong while checking</h3><p>Your settings are safe. Please send me this text:</p><pre style="white-space:pre-wrap">'+esc(String(err&&err.stack||err).slice(0,1500))+'</pre></div>';}
+  },30);
+}
+
+/* ---------- views ---------- */
+function showBusy(t){$('#landing').classList.add('hidden');$('#app').classList.remove('hidden');$('#main').innerHTML='<div class="busy">'+esc(t)+'</div>';}
+function showLanding(msg){$('#app').classList.add('hidden');$('#landing').classList.remove('hidden');$('#lmsg').textContent=msg||'';$('#lmsg').classList.toggle('hidden',!msg);}
+function showApp(){$('#landing').classList.add('hidden');$('#app').classList.remove('hidden');render();}
+function setTab(t){tab=t;render();window.scrollTo(0,0);}
+function render(){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  $('#main').innerHTML=tab==='report'?renderReport():tab==='plan'?renderPlan():renderRules();
+}
+const SEVN={error:'Error',warn:'Warning',info:'Note'};
+function visible(){
+  const q=filt.q.trim().toLowerCase();
+  return R.issues.filter(i=>!state.ignored[fp(i)]&&filt[i.sev]&&(!q||(i.file+' '+i.title+' '+i.detail+' '+i.hint).toLowerCase().includes(q)));
+}
+function renderReport(){
+  if(!R)return '';
+  const act=R.issues.filter(i=>!state.ignored[fp(i)]);
+  const n={error:0,warn:0,info:0};act.forEach(i=>n[i.sev]++);
+  const cls=n.error?'bad':n.warn?'meh':'ok';
+  const head=n.error?n.error+' error'+(n.error>1?'s':'')+' — the run will fail somewhere':n.warn?'No errors — '+n.warn+' warning'+(n.warn>1?'s':'')+' to look at':'No problems found — it should run';
+  let h='<div class="status '+cls+'"><h2>'+esc(head)+'</h2><div class="muted" style="font-size:13px">Folder <b>'+esc(FOLDER||'(files)')+'</b> · '+R.files+' files, '+R.scripts+' SQL scripts · checked '+esc(CHECKED_AT.toLocaleString())+'</div>';
+  h+='<ul class="runs">'+R.runs.map(r=>'<li>'+(r.assumed?'Assumed one production run (no raya*.py call found)':esc(cap(r.label))+' in <code>'+esc(r.file)+'</code>')+': '+r.selected+' of '+r.total+' scripts, '+r.items+' text replacements</li>').join('')+'</ul></div>';
+  h+='<div class="filters">'+['error','warn','info'].map(s=>'<label class="chip '+s[0]+'"><input type="checkbox" data-f="'+s+'"'+(filt[s]?' checked':'')+'> '+SEVN[s]+'s ('+n[s]+')</label>').join('')+
+    '<input class="in" id="q" type="search" placeholder="Filter…" value="'+esc(filt.q)+'"><select id="grp"><option value="file"'+(filt.group==='file'?' selected':'')+'>Group by file</option><option value="sev"'+(filt.group==='sev'?' selected':'')+'>Group by severity</option></select></div>';
+  h+='<div id="list">'+renderList()+'</div>';
+  const ign=R.issues.filter(i=>state.ignored[fp(i)]);
+  if(ign.length)h+='<details class="ign"><summary>Ignored ('+ign.length+')</summary><div style="margin-top:8px">'+ign.map(i=>issueHtml(i,true)).join('')+'</div></details>';
+  return h;
+}
+function renderList(){
+  const v=visible();
+  if(!v.length)return '<div class="empty">'+(R.issues.length?'Nothing matches the filters.':'Nothing to show.')+'</div>';
+  const order={error:0,warn:1,info:2};
+  if(filt.group==='sev'){
+    return ['error','warn','info'].map(s=>{const g=v.filter(i=>i.sev===s);return g.length?'<div class="fgroup"><div class="fhead">'+SEVN[s]+'s <span class="cnt muted">'+g.length+'</span></div>'+g.map(i=>issueHtml(i)).join('')+'</div>':'';}).join('');
+  }
+  const files=[...new Set(v.map(i=>i.file))];
+  const rank=f=>{const e=v.some(i=>i.file===f&&i.sev==='error');return (e?0:2)+(/\.py$/i.test(f)||!f?0:1);};
+  files.sort((a,b)=>rank(a)-rank(b)||(a<b?-1:1));
+  return files.map(f=>{const g=v.filter(i=>i.file===f).sort((a,b)=>order[a.sev]-order[b.sev]||a.line-b.line);
+    const c={error:0,warn:0,info:0};g.forEach(i=>c[i.sev]++);
+    return '<div class="fgroup"><div class="fhead">'+(f?'<code>'+esc(f)+'</code>':'General')+'<span class="cnt muted">'+['error','warn','info'].filter(s=>c[s]).map(s=>c[s]+' '+SEVN[s].toLowerCase()+(c[s]>1?'s':'')).join(' · ')+'</span></div>'+g.map(i=>issueHtml(i)).join('')+'</div>';}).join('');
+}
+function snippet(i){
+  if(!i.file||!i.line)return '';
+  const f=FILES.find(x=>x.key===i.file);if(!f)return '';
+  const L=f.text.split(/\r?\n/),a=Math.max(1,i.line-2),b=Math.min(L.length,i.line+2);
+  let h='<div class="snip">';
+  for(let k=a;k<=b;k++){h+='<div'+(k===i.line?' class="hl"':'')+'><span class="n">'+k+'</span>'+esc(L[k-1].replace(/\t/g,'    ').slice(0,400))+'</div>';
+    if(k===i.line&&i.col!=null&&i.col>=0&&i.col<400)h+='<div><span class="n"></span><span class="caret">'+' '.repeat(Math.max(0,(L[k-1].slice(0,i.col).replace(/\t/g,'    ')).length))+'^</span></div>';}
+  return h+'</div>';
+}
+function issueHtml(i,ign){
+  const id=esc(fp(i));
+  return '<div class="iss '+i.sev+'"><div class="ihead"><span class="pill '+i.sev+'">'+SEVN[i.sev]+'</span><span class="t">'+esc(i.title)+'</span>'+(i.line?'<span class="loc">line '+i.line+'</span>':'')+'</div>'+
+    (i.detail?'<div class="idet">'+esc(i.detail)+'</div>':'')+(i.hint?'<div class="fix"><b>Fix:</b> '+esc(i.hint)+'</div>':'')+
+    (i.sev!=='info'||i.line?snippet(i):'')+
+    '<div class="iact">'+(ign?'<button data-unignore="'+id+'">Stop ignoring</button>':'<button data-ignore="'+id+'" title="Hide this until you un-ignore it. Remembered in this browser.">Ignore</button>')+'</div></div>';
+}
+function renderPlan(){
+  if(!R)return '';
+  let h='<div class="card"><h3 style="margin:0 0 4px">Run order</h3><p class="muted" style="margin:0;font-size:13px">The order the runner uses: every .sql file in the folder, sorted by the full file name. A tick means the script runs in that call of run_sql_folder.</p></div>';
+  h+='<div class="card" style="padding:0"><div class="tw"><table><thead><tr><th>#</th><th>File</th><th>Engine</th><th>Result</th>'+R.runs.map(r=>'<th>'+esc(r.assumed?'Run':cap(r.mode)+(R.runs.length>1?' (L'+r.line+')':''))+'</th>').join('')+'</tr></thead><tbody>';
+  R.plan.forEach((s,i)=>{h+='<tr><td>'+(i+1)+'</td><td class="fn">'+esc(s.key)+'</td><td>'+esc(s.engine==='impala'?'Spark SQL':s.source==='oracle'?'Oracle':'Oracle ('+s.source+'?)')+'</td><td>'+(s.output?'af_mon.'+esc(s.table)+(s.part?' <span class="muted">by '+esc(s.part)+'</span>':''):'<span class="muted">view</span> '+esc(s.table))+'</td>'+s.runs.map(x=>'<td class="'+(x?'yes':'no')+'">'+(x?'✓':'–')+'</td>').join('')+'</tr>';});
+  return h+'</tbody></table></div></div>';
+}
+function renderRules(){
+  let h='<div class="card rules"><p style="margin-top:0">These are all the checks. They copy how <code>run_sql_folder()</code> in sachGiaoKhoa works. They only look for things that stop a script from running or make a step silently do nothing. They never judge your logic.</p>';
+  RULES.forEach(g=>{h+='<h3>'+esc(g[0])+'</h3>'+g[1].map(r=>'<div class="r"><b><span class="pill '+r[0]+'">'+SEVN[r[0]]+'</span> '+esc(r[1])+'</b><span>'+esc(r[2])+'</span></div>').join('');});
+  return h+'</div>';
+}
+const RULES=[
+ ['How the run works (what the checks assume)',[
+  ['info','Only .sql files directly in the folder run','Sorted by the full file name (Python sorted()). Files in subfolders, .txt files and .SQL files are skipped.'],
+  ['info','File name = <order>_<source>_<table_name>.sql','Split on "_": part 2 is the engine; everything after is the table name. Anything other than exactly "impala" is sent to Oracle.'],
+  ['info','Impala scripts run with spark.sql(); Oracle scripts are sent as "(query)"','Tables not in output.py become temporary views named after the table. Output tables are written to af_mon.<table> and get no view.'],
+  ['info','A failing script does not stop the run','It is only written to run_log.txt, so everything that depends on it fails quietly. That is why this checker exists.'],
+  ['info','Modes','"debug" runs exact_table minus exclude_table from debug.py; "standalone" does the same with standalone.py; any other value runs everything.'],
+  ['info','Text replacement','Each sql_var item replaces plain text in order, everywhere in the file (comments too). Output tables are skipped while the text "run_after_6pm" is still in the query.']]],
+ ['Python files (raya*.py, output.py, debug.py, refresh_list.py, standalone.py)',[
+  ['error','Syntax errors','Missing or extra commas, unclosed brackets or quotes, bad indentation, a missing ":" — checked the same way Python does. The executor or the config file would stop the run.'],
+  ['warn','Two strings next to each other in a list','"a" "b" becomes "ab" — almost always a missing comma.'],
+  ['warn','Same key twice in a dict','Only the last value is kept.'],
+  ['error','Config variable missing or the wrong shape','debug.py must define debug = {...}, refresh_list.py refresh_list = [...], output.py output = [{"T":..,"C":..}]. An empty output list crashes every script.'],
+  ['warn','Unknown keys / names that match no script','A typo in exact_table, exclude_table or a table name in output.py, debug.py or standalone.py.']]],
+ ['The executor call',[
+  ['error','Folder path without a trailing "/"','path + "debug.py" would point at the wrong file.'],
+  ['warn','mode is not production, debug or standalone','Any other value runs every script.'],
+  ['error','sql_var missing, or an item without "from"/"to"','The runner crashes.'],
+  ['warn','A replacement that never matches','The "from" text is not in any .sql file.'],
+  ['warn','The same "from" twice, or an earlier "from" that is part of a later one','The later item never matches.'],
+  ['warn','"from" also matches inside a longer word','e.g. "day2" inside "day20".'],
+  ['error','from_text() of a file that is not in the folder','That line fails.'],
+  ['warn','from_text(x).replace(...) that misses placeholders','The file still contains other sql_var placeholders.']]],
+ ['SQL structure (after replacement)',[
+  ['error','Unclosed brackets, quotes or /* comments',''],
+  ['error','";" in the file','spark.sql() runs one statement; Oracle queries are wrapped in brackets. (A single trailing ";" in Spark is a warning.)'],
+  ['error','Dangling AND / OR / = / comma','e.g. "WHERE AND", "x = AND", "a, b, FROM".'],
+  ['error','Empty SELECT, FROM, WHERE, ON or IN ()',''],
+  ['error','Missing comma between columns','e.g. "a b c" or "t.a t.b" in the SELECT list.'],
+  ['error','JOIN without ON / USING','Except CROSS and NATURAL joins.'],
+  ['error','CASE without END, BETWEEN without AND, GROUP/ORDER without BY',''],
+  ['error','CTE mistakes','A comma after the last CTE, or a missing comma between CTEs.'],
+  ['error','UNION with a different number of columns on each side','Only checked when no side uses *.'],
+  ['error','Placeholder left in the query','${...} that no sql_var replaces.'],
+  ['error','Oracle syntax in a Spark script, or Spark syntax in Oracle','SYSDATE, ROWNUM, FROM dual, (+), CONNECT BY in Spark; LIMIT and `backticks` in Oracle.'],
+  ['error','Oracle file ending in a -- comment with no line break','The closing ")" added by the runner ends up inside the comment.'],
+  ['warn','Unknown alias before a dot','"z.col" where z is not a table or alias in the query.']]],
+ ['Tables between scripts',[
+  ['error','Reading a view that is built later, or not built in this mode','Temporary views only exist after their script has run in the same session.'],
+  ['error','Reading an output table without af_mon.','Output tables get no temporary view.'],
+  ['error','An Oracle script reading a pipeline table','Oracle can’t see Spark views or af_mon tables.'],
+  ['error','Partition column "C" not in the query','Writing the output table fails.'],
+  ['warn','af_mon.X where X is not in output.py','That copy is never refreshed by this pipeline.'],
+  ['warn','A table name with no schema that no script builds','Usually a typo.'],
+  ['warn','Two files that build the same table','The later one wins.'],
+  ['info','Reading af_mon.X before X is rebuilt','You get the previous run’s data (expected for _backup scripts).']]]
+];
+
+/* ---------- export / import ---------- */
+function stamp(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'-'+z(d.getHours())+z(d.getMinutes());}
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800);}
+function reportMd(){
+  const act=R.issues.filter(i=>!state.ignored[fp(i)]);
+  const n={error:0,warn:0,info:0};act.forEach(i=>n[i.sev]++);
+  const L=['# SQL run check — '+(FOLDER||'files'),'','Checked '+CHECKED_AT.toLocaleString()+' · '+R.files+' files, '+R.scripts+' SQL scripts','','**'+n.error+' errors, '+n.warn+' warnings, '+n.info+' notes**'+(R.issues.length-act.length?' ('+(R.issues.length-act.length)+' ignored)':''),''];
+  R.runs.forEach(r=>L.push('- '+(r.assumed?'Assumed production run':cap(r.label)+' in '+r.file)+': '+r.selected+'/'+r.total+' scripts, '+r.items+' replacements'));
+  ['error','warn','info'].forEach(s=>{const g=act.filter(i=>i.sev===s);if(!g.length)return;L.push('','## '+SEVN[s]+'s','');
+    g.forEach(i=>L.push('- **'+(i.file||'general')+(i.line?':'+i.line:'')+'** — '+i.title+(i.detail?'. '+i.detail:'')+(i.hint?' _Fix: '+i.hint+'_':'')));});
+  return L.join('\n')+'\n';
+}
+function exportSettings(){download('sql-run-checker-settings-'+stamp()+'.json',JSON.stringify({app:APP_ID,v:1,exported:new Date().toISOString(),data:state},null,2),'application/json');}
+let pending=null;
+async function readSettings(file){
+  let o;try{o=JSON.parse(await file.text());}catch(e){return sheet('<h3>Import settings</h3><p>This file is not valid JSON.</p><div class="row-end"><button data-s="close">Close</button></div>');}
+  if(!o||o.app!==APP_ID||!o.data)return sheet('<h3>Import settings</h3><p>'+(o&&o.app?'This file is from a different app ('+esc(String(o.app).slice(0,40))+').':'This is not a SQL Run Checker settings file.')+'</p><div class="row-end"><button data-s="close">Close</button></div>');
+  pending=sanitizeState(o.data);const k=Object.keys(pending.ignored).length,cur=Object.keys(state.ignored).length;
+  sheet('<h3>Import settings</h3><p>The file has <b>'+k+'</b> ignored warnings. You have <b>'+cur+'</b> now.</p><ul class="muted" style="font-size:13px;padding-left:18px"><li><b>Merge</b> adds the ones you don’t have.</li><li><b>Replace</b> swaps your list for the file’s.</li></ul><div class="row-end"><button data-s="close">Cancel</button><button data-s="merge">Merge</button><button class="primary" data-s="replace">Replace</button></div>');
+}
+function sheet(h){$('#sheetc').innerHTML=h;$('#sheet').classList.remove('hidden');}
+function closeSheet(){$('#sheet').classList.add('hidden');pending=null;}
+
+/* ---------- wiring ---------- */
+document.addEventListener('DOMContentLoaded',()=>{
+  loadState();
+  const drop=$('#drop');
+  $('#pickDir').onclick=()=>$('#dirIn').click();
+  $('#pickFiles').onclick=()=>$('#filesIn').click();
+  $('#recheck').onclick=()=>$('#dirIn').click();
+  $('#dirIn').onchange=e=>{const fs=[...e.target.files];e.target.value='';if(fs.length)ingest(fs.map(f=>({file:f,path:f.webkitRelativePath||f.name})));};
+  $('#filesIn').onchange=e=>{const fs=[...e.target.files];e.target.value='';if(fs.length)ingest(fs.map(f=>({file:f,path:f.name})));};
+  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+  drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+  drop.addEventListener('drop',async e=>{e.preventDefault();drop.classList.remove('over');const ents=[...e.dataTransfer.items].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean),out=[];
+    if(ents.length){for(const en of ents)await walkEntry(en,'',out);}else[...e.dataTransfer.files].forEach(f=>out.push({file:f,path:f.name}));ingest(out);});
+  $('#expRep').onclick=()=>R&&download('sql-check-'+(FOLDER||'files').replace(/[^\w-]+/g,'_')+'-'+stamp()+'.md',reportMd(),'text/markdown');
+  $('#copyRep').onclick=async()=>{if(!R)return;try{await navigator.clipboard.writeText(reportMd());banner('Report copied.');}catch(e){sheet('<h3>Copy the report</h3><textarea class="in" rows="12" readonly>'+esc(reportMd())+'</textarea><div class="row-end" style="margin-top:8px"><button data-s="close">Close</button></div>');}};
+  document.querySelectorAll('.expSet').forEach(b=>b.onclick=exportSettings);
+  document.querySelectorAll('.impSet').forEach(b=>b.onclick=()=>$('#setIn').click());
+  $('#setIn').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)readSettings(f);};
+  $('#sheet').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(e.target.id==='sheet'||(b&&b.dataset.s==='close'))return closeSheet();
+    if(b&&pending&&(b.dataset.s==='merge'||b.dataset.s==='replace')){state.ignored=b.dataset.s==='replace'?pending.ignored:Object.assign({},pending.ignored,state.ignored);saveState();closeSheet();banner(b.dataset.s==='replace'?'Settings replaced.':'Settings merged.');if(R)render();}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+  document.addEventListener('click',e=>{
+    const t=e.target.closest('[data-tab],[data-ignore],[data-unignore]');if(!t)return;
+    if(t.dataset.tab)return setTab(t.dataset.tab);
+    if(t.dataset.ignore){const i=R.issues.find(x=>fp(x)===t.dataset.ignore);if(i){state.ignored[fp(i)]={title:i.title,file:i.file,at:new Date().toISOString().slice(0,10)};saveState();render();}}
+    if(t.dataset.unignore){delete state.ignored[t.dataset.unignore];saveState();render();}
+  });
+  document.addEventListener('change',e=>{
+    if(e.target.dataset.f){filt[e.target.dataset.f]=e.target.checked;render();}
+    if(e.target.id==='grp'){filt.group=e.target.value;$('#list').innerHTML=renderList();}
+    if(e.target.classList.contains('themeSel')){try{localStorage.setItem(TKEY,e.target.value);}catch(err){}applyTheme(e.target.value);}
+  });
+  document.addEventListener('input',e=>{if(e.target.id==='q'){filt.q=e.target.value;$('#list').innerHTML=renderList();}});
+  try{localStorage.setItem('sqlcheck.__t','1');localStorage.removeItem('sqlcheck.__t');}catch(e){storageOk=false;banner();}
+  applyTheme();
+  if(window.matchMedia)try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>applyTheme());}catch(e){}
+  setInterval(()=>{if(document.visibilityState==='visible'&&phaseNow()!==themePhase)applyTheme();},60000);
+});
+
+</script>
+</body>
+</html>

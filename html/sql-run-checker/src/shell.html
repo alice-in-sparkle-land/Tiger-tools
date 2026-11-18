@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SQL Run Checker</title>
+<style>/*CSS*/</style>
+</head>
+<body>
+<div id="banner" class="banner hidden"></div>
+<div id="landing">
+  <div class="hero"><img class="scene" alt=""><div class="hero-t"><h1>SQL Run Checker</h1><p>Catch the small mistakes before the run does.</p></div></div>
+  <div class="lbody">
+    <p class="muted" style="margin:0 0 14px">Drop in your workflow folder after every change. It reads <code>raya*.py</code>, the config files and every <code>.sql</code> the same way <code>run_sql_folder()</code> does, and lists anything that would stop a script from running. It never judges your logic.</p>
+    <div class="drop" id="drop">
+      <p style="margin:0 0 6px;font-weight:600">Drop the folder (or a .zip of it) here</p>
+      <p class="muted" style="margin:0 0 14px;font-size:13px">Reads .sql, .py and .txt files. Nothing is uploaded.</p>
+      <div class="btns"><button class="primary" id="pickDir">Choose folder</button><button id="pickFiles">Choose files or .zip</button></div>
+      <input type="file" id="dirIn" webkitdirectory directory multiple hidden>
+      <input type="file" id="filesIn" multiple accept=".sql,.py,.txt,.md,.zip" hidden>
+    </div>
+    <p id="lmsg" class="hidden" style="color:var(--err);margin:10px 0 0"></p>
+    <div class="lrow"><span><button class="impSet">Import settings</button> <button class="expSet">Export settings</button></span><label class="muted">Theme <select class="themeSel"></select></label></div>
+    <div class="cats">
+      <div class="card"><b>Python</b>Commas, brackets, quotes, indentation in raya.py, output.py, debug.py, refresh_list.py, standalone.py.</div>
+      <div class="card"><b>Replacements</b>sql_var items that replace nothing, twice, or inside longer words; placeholders left behind.</div>
+      <div class="card"><b>SQL</b>Dangling AND/OR/commas, unclosed brackets, missing ON, CTE and UNION mistakes, Oracle vs Spark syntax.</div>
+      <div class="card"><b>Between scripts</b>Views read before they exist, output tables without af_mon., partition columns, file names.</div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:14px">Works offline. Your list of ignored warnings is saved in this browser; use Export settings to keep a copy.</p>
+  </div>
+</div>
+<div id="app" class="hidden">
+  <div class="band"><img class="scene" alt=""></div>
+  <header class="top">
+    <span class="brand">SQL Run Checker</span>
+    <nav class="tabs" id="tabs"><button data-tab="report" class="on">Report</button><button data-tab="plan">Run order</button><button data-tab="rules">Rules</button></nav>
+    <span class="spacer"></span>
+    <div class="actions">
+      <button class="primary" id="recheck">Check a folder</button>
+      <button id="expRep">Export report</button>
+      <button id="copyRep">Copy report</button>
+      <button class="impSet">Import settings</button>
+      <button class="expSet">Export settings</button>
+      <select class="themeSel" title="Theme"></select>
+    </div>
+  </header>
+  <main id="main"></main>
+</div>
+<input type="file" id="setIn" accept=".json,application/json" hidden>
+<div id="sheet" class="sheet hidden"><div class="card" id="sheetc"></div></div>
+<script>
+'use strict';
+/*JS*/
+</script>
+</body>
+</html>

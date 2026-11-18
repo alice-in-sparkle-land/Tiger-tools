@@ -1,0 +1,1873 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SQL Doc Builder</title>
+<style id="base-css">
+:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1c1a;--muted:#6a6963;--line:#e3e1da;--soft:#f1efe9;--accent:#2b62d9;--accent-soft:#e8eefc;--warn:#a6461a;--warn-soft:#fcefe6;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141413;--panel:#1d1d1b;--ink:#ecebe5;--muted:#9d9b93;--line:#34332f;--soft:#262623;--accent:#7ea6ff;--accent-soft:#1e2a45;--warn:#f2a374;--warn-soft:#3a2417}}
+:root[data-theme="dark"]{--bg:#141413;--panel:#1d1d1b;--ink:#ecebe5;--muted:#9d9b93;--line:#34332f;--soft:#262623;--accent:#7ea6ff;--accent-soft:#1e2a45;--warn:#f2a374;--warn-soft:#3a2417}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none;cursor:pointer}a:hover{text-decoration:underline}
+code,pre{font-family:var(--mono);font-size:12.5px}
+code{background:var(--soft);padding:1px 5px;border-radius:4px;word-break:break-word}
+pre{background:var(--soft);padding:12px;border-radius:8px;overflow:auto;max-height:440px;white-space:pre;margin:8px 0 0}
+h2{font-size:18px;margin:4px 0 12px}h3{font-size:15px;margin:0 0 8px}
+.muted{color:var(--muted);font-weight:400}
+button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 11px;border-radius:7px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.in,textarea,select{font:inherit;width:100%;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:7px;padding:7px 9px}
+textarea{resize:vertical;min-height:64px}
+select{width:auto}
+.lbl{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin:12px 0 4px;text-transform:uppercase;letter-spacing:.04em}
+header.top{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.brand{font-family:"Noto Serif",Georgia,serif;font-weight:600;font-size:16px;margin-right:6px}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap}
+nav.tabs button{border-color:transparent;background:transparent}
+nav.tabs button.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.spacer{flex:1}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+main{max-width:1240px;margin:0 auto;padding:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-bottom:12px}
+.grid2 .card{margin:0}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.stat{background:var(--soft);border-radius:8px;padding:8px 12px;min-width:110px}
+.stat b{display:block;font-size:20px}
+.stat span{font-size:12px;color:var(--muted)}
+.chip{display:inline-block;font-family:var(--mono);font-size:12px;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:2px 4px 2px 0;cursor:pointer;word-break:break-all}
+.chip.int{border-color:var(--accent);color:var(--accent)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;background:var(--soft)}
+.kind{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.kind.output{color:var(--accent);border-color:var(--accent)}
+.kind.source{color:var(--muted)}
+details.sc{padding:10px 14px;margin-bottom:8px}
+details.sc>summary{cursor:pointer;list-style:none}
+details.sc>summary::-webkit-details-marker{display:none}
+details.sc>summary::before{content:"\25B8";display:inline-block;width:16px;color:var(--muted)}
+details.sc[open]>summary::before{content:"\25BE"}
+details.sc>summary{overflow-wrap:anywhere}details.sc{min-width:0}
+details.sc summary .tgt{display:block;margin-left:16px;font-size:12.5px}
+.ord{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:6px}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;margin-top:12px;font-size:13px}
+.kv>div:nth-child(odd){color:var(--muted)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar .in{max-width:340px}
+.flag{border-left:3px solid var(--warn)}
+.flag ul{margin:8px 0 0;padding-left:18px}
+.flag li{margin:3px 0}
+.graphwrap{overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-height:72vh}
+svg.lineage text{pointer-events:none}
+svg.focus g.node:not(.hl),svg.focus path:not(.hl){opacity:.12}
+svg.focus path.hl{stroke:var(--accent);stroke-opacity:1;stroke-width:1.8}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;margin:0 0 10px;text-transform:capitalize}
+.info{min-height:46px;font-size:13px}
+
+.drop{border:2px dashed var(--line);border-radius:14px;padding:36px 20px;text-align:center;background:var(--panel)}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.hidden{display:none!important}
+.layerh{display:flex;align-items:center;gap:6px;margin:20px 0 8px;font-size:15px;text-transform:capitalize}
+main.doc{max-width:980px;padding:24px 20px 60px}
+main.doc h1{font-size:26px;margin:0 0 6px}
+main.doc h2{font-size:20px;border-bottom:1px solid var(--line);padding-bottom:6px;margin:34px 0 12px}
+main.doc h3{font-size:16px;margin:22px 0 8px}
+main.doc h4{font-size:14px;margin:18px 0 6px}
+main.doc .graph{overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--panel);margin:8px 0 16px}
+.role{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap;border:1px solid currentColor;justify-self:start}
+.r-def{color:var(--accent)}.r-feed{color:#16a34a}.r-filt{color:var(--warn)}.r-join{color:#8b5cf6}.r-grp{color:#0f9f8f}.r-pass{color:var(--muted)}
+.hit{display:grid;grid-template-columns:120px 52px 1fr;gap:8px;padding:7px 0;border-top:1px solid var(--line);align-items:start;font-size:13px}
+.ln{font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:3px}
+.expr{display:inline-block;font-family:var(--mono);font-size:12.5px;background:var(--soft);padding:3px 8px;border-radius:6px;margin:3px 0;word-break:break-word;white-space:pre-wrap}
+mark{background:#ffe58a;color:#1c1c1a;border-radius:3px;padding:0 1px}
+ul.tree{list-style:none;padding-left:0;margin:0}ul.tree .expr{display:table}ul.tree ul{list-style:none;padding-left:16px;border-left:1px dashed var(--line);margin:4px 0 4px 6px}ul.tree li{margin:6px 0}
+.scope{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:8px;font-size:13px}.scope label{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+.cfg{display:grid;grid-template-columns:150px minmax(0,320px) 1fr;gap:8px 12px;align-items:center;font-size:13px}.cfg select{width:100%}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg button{border:0;border-radius:0}.seg button.on{background:var(--accent);color:var(--bg)}
+tr.off td{color:var(--muted)}tr.off td a{color:var(--muted)}
+.warn-t{color:var(--warn);font-size:12px;margin-top:3px}
+.doclike h3{font-size:15px;margin:16px 0 6px}.doclike h3:first-child{margin-top:0}.doclike ol,.doclike ul{padding-left:20px;margin:6px 0}.doclike li{margin:4px 0}
+@media (max-width:700px){header.top{position:static}}
+@media (max-width:600px){.cfg{grid-template-columns:1fr}}
+@media (max-width:600px){.hit{grid-template-columns:1fr auto}.hit>div{grid-column:1/-1}}
+@media (max-width:600px){.kv{grid-template-columns:1fr}.kv>div:nth-child(odd){margin-top:6px}}
+.hero{position:relative;height:230px;border-radius:0 0 18px 18px;overflow:hidden;background:var(--soft)}
+.scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+.band .scene{object-position:center bottom}
+.hero-t{position:absolute;left:24px;right:24px;top:24px;color:#1E2733;max-width:520px}
+.hero-t h1{font-family:"Noto Serif",Georgia,serif;font-size:28px;margin:0 0 4px;font-weight:600}
+.hero-t p{margin:0;font-size:14px;opacity:.85}
+.sky-dark .hero-t,.sky-dark .band-t,.sky-dark .band-th{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.landing-body{padding:18px 16px 0}
+#landing{max-width:760px;margin:0 auto 8vh;padding:0}
+.land-row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-top:12px;font-size:13px}
+.band{position:relative;height:44px;overflow:hidden}
+.band>*:not(.scene){position:relative}
+.band-t{font-family:"Noto Serif",Georgia,serif;font-weight:600;font-size:18px;color:#1E2733}
+.band-th{font-size:12px;color:#1E2733;display:flex;gap:6px;align-items:center}
+.themeSel{width:auto;padding:4px 6px;font-size:12px;border-radius:6px}
+.band .themeSel{background:rgba(255,255,255,.7);color:#1E2733;border-color:rgba(0,0,0,.15)}
+.banner{position:sticky;top:0;z-index:30;background:var(--accent);color:#fff;padding:8px 16px;font-size:13px;text-align:center}
+.banner.err{background:var(--warn)}
+.sheet{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center;padding:16px}
+.sheet-c{width:100%;max-width:520px;margin:0}
+.sheet-c.wide{max-width:640px;max-height:86vh;display:flex;flex-direction:column}
+.pick{overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-height:120px}
+.pick-sec{padding:6px 0;border-bottom:1px solid var(--line)}.pick-sec:last-child{border-bottom:0}
+.pick label{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13.5px;padding:3px 0;overflow-wrap:anywhere}
+.pick-h{font-weight:600}.pick-subs{padding-left:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0 12px}
+.pick input{margin-top:3px;accent-color:var(--accent)}.pick-tools{display:flex;gap:8px;margin-bottom:8px}
+.row-end{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.kind.transformation{color:var(--muted)}
+.ro .edit-hint{display:none}
+.note-ro{white-space:pre-wrap;font-size:13.5px;margin:4px 0 2px}.note-title{font-family:"Noto Serif",Georgia,serif;font-size:20px;font-weight:600}
+.ro-badge{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--muted);margin-right:6px}
+@media print{.band,.banner,.sheet,header.top{display:none}pre{max-height:none}}
+</style>
+</head>
+<body>
+<div id="banner" class="banner hidden"></div>
+<div id="landing">
+  <div class="hero"><img class="scene" id="heroScene" alt=""><div class="hero-t"><h1>SQL Doc Builder</h1><p>Turn a SQL project folder into documentation your team can read.</p></div></div>
+  <div class="landing-body">
+  <p class="muted" style="margin:0 0 16px">Point it at your project folder and it drafts the documentation for you: how the pipeline runs, data flow, table catalog, column logic, script-by-script notes and a list of things to review. You add the "why" in plain words, then export a Markdown file or a single HTML page.</p>
+  <div class="drop" id="drop">
+    <p style="margin:0 0 6px;font-weight:600">Drop your project folder here</p>
+    <p class="muted" style="margin:0 0 16px">Reads .sql, .hql, .txt, .py and .md files</p>
+    <button class="primary" id="pickDir">Choose folder</button>
+    <button id="pickFiles">Choose files</button>
+    <input type="file" id="dirIn" webkitdirectory directory multiple hidden>
+    <input type="file" id="filesIn" multiple accept=".sql,.hql,.txt,.py,.md" hidden>
+  </div>
+  <div class="land-row"><button id="impNotes0">Import notes</button><label class="muted">Theme <select class="themeSel"></select></label></div>
+  <p class="muted" style="font-size:13px;margin-top:14px">Everything runs inside this page. Your files are never uploaded and the page makes no network requests, so it also works offline. Your notes are saved in this browser; use Export notes to keep a backup file.</p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="band"><img class="scene" id="bandScene" alt=""></div>
+  <header class="top">
+    <span class="brand">SQL Doc Builder</span>
+    <nav class="tabs" id="tabs"></nav>
+    <span class="spacer"></span>
+    <div class="actions">
+      <button id="expMd">Export .md</button>
+      <button class="primary" id="expHtml">Export .html</button>
+      <button id="bkNotes">Export notes</button>
+      <button id="rsNotes">Import notes</button>
+      <button id="reload">Load folder</button>
+      <button id="expInt" title="A read-only interactive copy with the SQL and your notes built in, to send to a colleague">Share interactive</button>
+      <select class="themeSel" title="Theme"></select>
+    </div>
+  </header>
+  <main id="main"></main>
+</div>
+<input type="file" id="notesIn" accept=".json,application/json" hidden>
+<div id="imp" class="sheet hidden"><div class="card sheet-c" id="impBody"></div></div>
+
+
+<script>
+'use strict';
+const PAGE_SRC='<!doctype html>\n'+document.documentElement.outerHTML;
+const EMB=(()=>{const e=document.getElementById('embedded');if(!e)return null;try{return JSON.parse(e.textContent);}catch(x){return null;}})();
+const READONLY=!!EMB;
+/* ================= Parsing (pure functions) ================= */
+const ENGINES=new Set(['impala','oracle','hive','spark','presto','trino','bq','bigquery','pg','postgres','mysql','mssql','sqlserver','teradata','snowflake','vertica','redshift']);
+const LAYER_ORDER=['transform','bridge','dim','trigger','fact','agg','feature','label','other'];
+const LAYER_SET=new Set(LAYER_ORDER.filter(l=>l!=='other'));
+const LAYER_COLOR={transform:'#3b7ddd',bridge:'#8b5cf6',dim:'#0f9f8f',trigger:'#d98a0b',fact:'#dc4c4c',agg:'#16a34a',feature:'#db2777',label:'#5b5bd6',other:'#8a8a84',source:'#a39e93'};
+const LAYER_HINT={transform:'Cleans and reshapes raw source data into usable form',bridge:'Links keys/IDs between entities and builds daily snapshots',dim:'Reference / lookup tables',trigger:'Detects events or triggers',fact:'Core fact tables at a defined grain',agg:'Aggregations for reporting and monitoring',feature:'Features for models / analysis',label:'Target labels for modeling',other:'Other scripts'};
+const KW=new Set('select where group order having limit union intersect except minus on as left right inner outer full cross join lateral unnest dual values set when then else end and or not partition with using natural semi anti window qualify into table by is null case only'.split(' '));
+const OV_FIELDS=[
+  ['purpose','Purpose','What business question does this datamart answer? Who asked for it?'],
+  ['consumers','Consumers','Teams, dashboards, models or reports that read the outputs.'],
+  ['schedule','Schedule & SLA','When it runs, how long it takes, when data must be ready.'],
+  ['howto','How to run','Entry point (e.g. standalone.py), parameters, how to rerun one step or backfill a date.'],
+  ['issues','Known issues & next steps','Open bugs, data-quality caveats, planned work.']
+];
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=s=>s.replace(/\s+/g,'').toLowerCase();
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+const LI=l=>{const i=LAYER_ORDER.indexOf(l);return i<0?99:i;};
+
+const P='(?:[\\w$#]*\\$\\{[^}]+\\}[\\w$#]*|\\{[A-Za-z_]\\w*\\}[\\w$#]*|[\\w$#]+)';
+const ID=P+'(?:\\s*\\.\\s*'+P+'){0,2}';
+const TGT=[
+  'INSERT\\s+(?:INTO|OVERWRITE)\\s+(?:TABLE\\s+)?('+ID+')',
+  'CREATE\\s+(?:OR\\s+REPLACE\\s+)?(?:(?:GLOBAL\\s+|PRIVATE\\s+)?TEMP(?:ORARY)?\\s+|EXTERNAL\\s+|MATERIALIZED\\s+)?(?:TABLE|VIEW)\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?('+ID+')',
+  'MERGE\\s+INTO\\s+('+ID+')',
+  'UPSERT\\s+INTO\\s+(?:TABLE\\s+)?('+ID+')',
+  'UPDATE\\s+('+ID+')\\s+(?:\\w+\\s+)?SET\\b',
+  'DELETE\\s+FROM\\s+('+ID+')',
+  'TRUNCATE\\s+(?:TABLE\\s+)?('+ID+')'
+].map(s=>new RegExp('\\b'+s,'gi'));
+const CREATE_RE=TGT[1];
+const DROP_RE=new RegExp('\\bDROP\\s+(?:TABLE|VIEW)\\s+(?:IF\\s+EXISTS\\s+)?('+ID+')','gi');
+const SRC_RE=new RegExp('\\b(?:FROM|JOIN|USING)\\s+('+ID+')','gi');
+const COMMA_RE=new RegExp('^(?:\\s+(?:AS\\s+)?([\\w$#]+))?\\s*,\\s*('+ID+')(?!\\s*\\()','i');
+
+function stripSql(s,keepStrings){
+  let out='',i=0;const n=s.length;
+  while(i<n){
+    const c=s[i],d=s[i+1];
+    if(c==='-'&&d==='-'){while(i<n&&s[i]!=='\n')i++;continue;}
+    if(c==='/'&&d==='*'){const j=s.indexOf('*/',i+2);i=j<0?n:j+2;out+=' ';continue;}
+    if(c==="'"){
+      const st=i;i++;
+      while(i<n){if(s[i]==="'"){if(s[i+1]==="'"){i+=2;continue;}break;}i++;}
+      i++;out+=keepStrings?s.slice(st,i):"''";continue;
+    }
+    if(c==='"'||c==='`'){const j=s.indexOf(c,i+1);out+=j<0?s.slice(i+1):s.slice(i+1,j);i=j<0?n:j+1;continue;}
+    out+=c;i++;
+  }
+  return out;
+}
+
+function leadingComment(s){
+  const out=[];let inBlock=false;
+  for(const raw of s.split(/\r?\n/)){
+    const l=raw.trim();
+    if(inBlock){const e=l.indexOf('*/');out.push((e<0?l:l.slice(0,e)).replace(/^\*+\s?/,''));if(e>=0)inBlock=false;continue;}
+    if(!l){if(out.length)out.push('');continue;}
+    if(l.startsWith('--')){out.push(l.replace(/^-+\s?/,''));continue;}
+    if(l.startsWith('/*')){const b=l.slice(2),e=b.indexOf('*/');if(e>=0)out.push(b.slice(0,e).replace(/^\*+\s?/,''));else{out.push(b.replace(/^\*+\s?/,''));inBlock=true;}continue;}
+    break;
+  }
+  return out.filter(l=>!/^[-=*#~_\s]{3,}$/.test(l)).join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+
+function parseName(name){
+  const base=name.replace(/\.[^.]+$/,'');
+  const m=base.match(/^(\d{6,})_(.+)$/);
+  const order=m?m[1]:'';
+  const toks=(m?m[2]:base).split('_');
+  let engine='';
+  if(toks.length>1&&ENGINES.has(toks[0].toLowerCase()))engine=toks.shift().toLowerCase();
+  let layer='other';
+  for(const t of toks){if(LAYER_SET.has(t.toLowerCase())){layer=t.toLowerCase();break;}}
+  return {order,engine,layer,logical:toks.join('_'),sortKey:name};
+}
+
+function parseSql(f){
+  const meta=parseName(f.name);
+  const raw=f.text;
+  const t=stripSql(raw,false);
+  const tk=stripSql(raw,true);
+  const vars=new Set();
+  for(const m of tk.matchAll(/\$\{\s*([\w.:-]+)\s*\}/g))vars.add('${'+m[1]+'}');
+  for(const m of tk.matchAll(/(?<![\w$\\])\{([A-Za-z_]\w*)\}/g))vars.add('{'+m[1]+'}');
+  for(const m of tk.matchAll(/(?<![\w&])&&?([A-Za-z]\w*)/g))vars.add('&'+m[1]);
+  const partitions=new Set();
+  for(const m of tk.matchAll(/\bPARTITION\s*\(([^)]*)\)/gi))partitions.add(m[1].replace(/\s+/g,' ').trim());
+  const ctes=new Set();
+  for(const m of t.matchAll(/(?:\bWITH|,)\s*([\w$#]+)\s*(?:\([^()]*\)\s*)?AS\s*\(/gi))ctes.add(m[1].toLowerCase());
+  const lastCreate={},lastDrop={},targets=new Set();
+  TGT.forEach(re=>{for(const m of t.matchAll(re)){const n=norm(m[1]);if(KW.has(n)||ctes.has(n))continue;targets.add(n);if(re===CREATE_RE)lastCreate[n]=Math.max(lastCreate[n]||0,m.index);}});
+  for(const m of t.matchAll(DROP_RE)){const n=norm(m[1]);lastDrop[n]=Math.max(lastDrop[n]||0,m.index);}
+  const temps=new Set([...targets].filter(n=>lastDrop[n]!=null&&lastCreate[n]!=null&&lastDrop[n]>lastCreate[n]));
+  const u=t.replace(/\bDELETE\s+FROM\b/gi,'DELETE__X ').replace(/\bDISTINCT\s+FROM\b/gi,'DISTINCT__X ')
+           .replace(/\b(EXTRACT|TRIM|SUBSTRING|OVERLAY|POSITION)\s*\(([^()]*?)\bFROM\b/gi,'$1($2 __X');
+  const sources=new Set();
+  const add=x=>{const n=norm(x);if(!n||KW.has(n)||ctes.has(n)||/^\d+$/.test(n)||n.startsWith('__'))return;sources.add(n);};
+  for(const m of u.matchAll(SRC_RE)){
+    add(m[1]);
+    let rest=u.slice(m.index+m[0].length,m.index+m[0].length+3000);
+    for(let k=0;k<50;k++){
+      const mm=rest.match(COMMA_RE);
+      if(!mm||(mm[1]&&KW.has(mm[1].toLowerCase())))break;
+      add(mm[2]);rest=rest.slice(mm[0].length);
+    }
+  }
+  return Object.assign(meta,{
+    kind:'sql',key:f.key||f.name,name:f.name,raw,desc:leadingComment(raw),
+    targets:[...targets].filter(x=>!temps.has(x)),
+    sources:[...sources].filter(x=>!temps.has(x)),
+    temps:[...temps],vars:[...vars],partitions:[...partitions],
+    lines:raw.split('\n').length,stmtCount:t.split(';').filter(x=>x.trim()).length
+  });
+}
+
+function parsePy(f){
+  const raw=f.text,lines=raw.split(/\r?\n/),com=[];
+  for(const l of lines){const t=l.trim();if(/^#!|coding[:=]/.test(t))continue;if(t.startsWith('#')){com.push(t.replace(/^#+\s?/,''));continue;}if(!t&&!com.length)continue;break;}
+  const dm=raw.match(/^(?:\s*#[^\n]*\n|\s*\n)*\s*[rRuU]?("""|''')([\s\S]*?)\1/);
+  return {
+    kind:'py',key:f.key||f.name,name:f.name,raw,lines:lines.length,
+    desc:[com.join('\n').trim(),dm?dm[2].trim():''].filter(Boolean).join('\n\n'),
+    defs:[...raw.matchAll(/^(?:async\s+)?def\s+(\w+)\s*\(/gm)].map(m=>m[1]),
+    refs:[...new Set([...raw.matchAll(/['"]([\w./\\-]+\.(?:sql|hql|txt|csv|md|py|json|ya?ml))['"]/gi)].map(m=>m[1]))],
+    isMain:/__name__\s*==\s*['"]__main__['"]/.test(raw),tables:[]
+  };
+}
+
+/* ================= Column-level parsing ================= */
+const COLKW=new Set(('select from where and or not null is in between like rlike regexp ilike as case when then else end cast try_cast '+
+  'int integer bigint smallint tinyint string varchar varchar2 char nvarchar decimal double float real numeric number date timestamp boolean bool '+
+  'true false interval day days month months year years hour hours minute minutes second seconds week weeks distinct all over partition by order asc desc '+
+  'rows range preceding following unbounded current row nulls first last exists any some within group filter sysdate systimestamp '+
+  'current_date current_timestamp localtimestamp now rownum level dual on join left right inner outer full cross using with union except minus '+
+  'intersect limit having into values set table if escape collate separator').split(/\s+/));
+const escRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const TGT1=TGT.map(r=>new RegExp(r.source,'i'));
+const BARE_RE=/^\s*(?:[A-Za-z_][\w$]*\s*\.\s*)*[A-Za-z_][\w$]*\s*$/;
+
+function blankSql(s){
+  const a=s.split('');const n=s.length;let i=0;
+  while(i<n){
+    const c=s[i],d=s[i+1];
+    if(c==='-'&&d==='-'){while(i<n&&s[i]!=='\n'){a[i]=' ';i++;}continue;}
+    if(c==='/'&&d==='*'){const j=s.indexOf('*/',i+2),e=j<0?n:j+2;for(let k=i;k<e;k++)if(s[k]!=='\n')a[k]=' ';i=e;continue;}
+    if(c==="'"){i++;while(i<n){if(s[i]==="'"){if(s[i+1]==="'"){a[i]=a[i+1]=' ';i+=2;continue;}break;}if(s[i]!=='\n')a[i]=' ';i++;}i++;continue;}
+    if(c==='"'||c==='`'){a[i]=' ';const j=s.indexOf(c,i+1);if(j>=0){a[j]=' ';i=j+1;}else i=n;continue;}
+    i++;
+  }
+  return a.join('');
+}
+function matchParen(b,o){let d=0;for(let i=o;i<b.length;i++){if(b[i]==='(')d++;else if(b[i]===')'){d--;if(d===0)return i;}}return b.length;}
+function enclosingOpen(b,a,p){let d=0;for(let i=p-1;i>=a;i--){if(b[i]===')')d++;else if(b[i]==='('){if(d===0)return i;d--;}}return -1;}
+function splitTop(b,x,y){const out=[];let d=0,s=x;for(let i=x;i<y;i++){const c=b[i];if(c==='(')d++;else if(c===')')d--;else if(c===','&&d===0){out.push([s,i]);s=i+1;}}out.push([s,y]);return out;}
+function refsOf(t){const out=new Set();for(const m of t.matchAll(/(?<![\w$.])(?:[A-Za-z_][\w$]*\s*\.\s*)*([A-Za-z_][\w$]*)(?![\w$])(?!\s*\()/g)){const n=m[1].toLowerCase();if(!COLKW.has(n))out.add(n);}return [...out];}
+const wordAt=(b,i,re)=>/[A-Za-z]/.test(b[i])&&!/[\w$]/.test(b[i-1]||' ')&&re.test(b.slice(i,i+14));
+
+function parseColumns(s,fix){
+  const raw=s.raw,b=blankSql(raw);s.blank=b;
+  const ls=[0];for(let i=0;i<raw.length;i++)if(raw[i]==='\n')ls.push(i+1);
+  const lineOf=p=>{let lo=0,hi=ls.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(ls[m]<=p)lo=m;else hi=m-1;}return lo+1;};
+  s.lineOf=lineOf;s.rawLines=raw.split('\n');
+  const defs=[],stmts=[];let st=0;
+  for(let i=0;i<=b.length;i++)if(i===b.length||b[i]===';'){if(b.slice(st,i).trim())stmts.push([st,i]);st=i+1;}
+  s.stmts=stmts;
+  const txt=(x,y)=>raw.slice(x,y).replace(/\s+/g,' ').trim();
+  const push=(name,x,y,es,ee,ctx,into)=>{
+    const eb=b.slice(es,ee),refs=refsOf(eb),bare=BARE_RE.test(eb);name=name.toLowerCase();
+    defs.push({name,expr:txt(es,ee),refs,pass:bare&&refs.length===1&&refs[0]===name,rename:bare&&refs.length===1&&refs[0]!==name,start:x,end:y,line:lineOf(es),ctx,into});
+  };
+  for(const [a,z] of stmts){
+    const seg=b.slice(a,z);
+    let target='',tp=Infinity;
+    TGT1.forEach(re=>{const m=re.exec(seg);if(m&&m.index<tp){tp=m.index;target=fix(norm(m[1]));}});
+    const ctes=[];
+    for(const m of seg.matchAll(/(?:\bWITH|,)\s*([A-Za-z_][\w$]*)\s*(?:\([^()]*\)\s*)?AS\s*\(/gi)){const o=a+m.index+m[0].length-1;ctes.push({name:m[1].toLowerCase(),o,c:matchParen(b,o)});}
+    const im=seg.match(new RegExp('\\bINSERT\\s+(?:INTO|OVERWRITE)\\s+(?:TABLE\\s+)?'+ID+'\\s*(?:PARTITION\\s*\\([^)]*\\)\\s*)?\\(([^()]*)\\)\\s*(?=SELECT|WITH|\\()','i'));
+    const insCols=im?im[1].split(',').map(x=>x.trim().split(/\s+/)[0].split('.').pop().toLowerCase()):null;
+    // SELECT lists
+    for(const m of seg.matchAll(/\bSELECT\b/gi)){
+      const p=a+m.index;let i=p+6,d=0,is=i;const items=[];
+      for(;i<z;i++){
+        const ch=b[i];
+        if(ch==='(')d++;
+        else if(ch===')'){if(d===0)break;d--;}
+        else if(d===0){
+          if(ch===','){items.push([is,i]);is=i+1;}
+          else if(wordAt(b,i,/^(FROM|INTO|UNION|WHERE|EXCEPT|MINUS|INTERSECT|LIMIT|BULK)(?![\w$])/i))break;
+        }
+      }
+      items.push([is,i]);
+      const eo=enclosingOpen(b,a,p),cte=ctes.find(c=>c.o===eo);
+      let ctx,into;
+      if(cte){ctx='cte';into=cte.name;}
+      else if(eo<0||/\bAS\s*$/i.test(b.slice(Math.max(a,eo-12),eo))){ctx=target?'table':'result';into=target||s.implicit||'(query result)';if(!target&&s.implicit)ctx='table';}
+      else{ctx='subquery';into='(subquery)';}
+      items.forEach(([x,y],k)=>{
+        const t=b.slice(x,y);if(!t.trim())return;
+        const lead=t.match(k===0?/^\s*(?:(?:DISTINCT|ALL|STRAIGHT_JOIN)\s+)?/i:/^\s*/)[0].length;
+        const bs=x+lead,body=b.slice(bs,y);
+        if(/^(?:[A-Za-z_][\w$]*\s*\.\s*)?\*\s*$/.test(body))return;
+        let name=null,ee=y,mm;
+        if((mm=body.match(/\s+AS\s+([A-Za-z_][\w$]*)\s*$/i))){name=mm[1];ee=bs+mm.index;}
+        else if((mm=body.match(/([\w$)\]'])\s+([A-Za-z_][\w$]*)\s*$/))&&!COLKW.has(mm[2].toLowerCase())){name=mm[2];ee=bs+mm.index+1;}
+        else if((mm=body.match(/^(?:[A-Za-z_][\w$]*\s*\.\s*)*([A-Za-z_][\w$]*)\s*$/)))name=mm[1];
+        if((ctx==='table'||ctx==='result')&&insCols&&insCols[k])name=insCols[k];
+        if(name)push(name,x,y,bs,ee,ctx,into);
+      });
+    }
+    // UPDATE ... SET / MERGE ... SET and MERGE ... INSERT (cols) VALUES (...)
+    if(target&&/\b(UPDATE|MERGE)\b/i.test(seg)){
+      for(const m of seg.matchAll(/\bSET\b/gi)){
+        let i=a+m.index+3,d=0;const is=i;
+        for(;i<z;i++){const ch=b[i];if(ch==='(')d++;else if(ch===')'){if(d===0)break;d--;}else if(d===0&&wordAt(b,i,/^(WHERE|WHEN|FROM|RETURNING|DELETE)(?![\w$])/i))break;}
+        splitTop(b,is,i).forEach(([x,y])=>{const mm=b.slice(x,y).match(/^\s*(?:[A-Za-z_][\w$]*\s*\.\s*)?([A-Za-z_][\w$]*)\s*=(?!=)/);if(mm)push(mm[1],x,y,x+mm[0].length,y,'table',target);});
+      }
+      for(const m of seg.matchAll(/\bINSERT\s*\(([^()]*)\)\s*VALUES\s*\(/gi)){
+        const cols=m[1].split(',').map(x=>x.trim().split('.').pop());const o=a+m.index+m[0].length-1,c=matchParen(b,o);
+        splitTop(b,o+1,c).forEach(([x,y],k)=>{if(cols[k])push(cols[k],x,y,x,y,'table',target);});
+      }
+    }
+  }
+  s.defs=defs;
+}
+
+const CLAUSES=[['GROUP\\s+BY','group'],['ORDER\\s+BY','order'],['SORT\\s+BY','order'],['PARTITION\\s+BY','window'],['CLUSTER\\s+BY','window'],['DISTRIBUTE\\s+BY','window'],
+  ['PARTITION(?=\\s*\\()','partition'],['WHERE','filter'],['QUALIFY','filter'],['HAVING','having'],['ON','join'],['USING','join'],['SET','update'],
+  ['VALUES','insert'],['INSERT','insert'],['SELECT','select'],['FROM','source'],['JOIN','source']].map(([k,r])=>[new RegExp('^'+k+'(?![\\w$])','i'),r]);
+function clauseRole(b,a,pos){
+  let d=0;
+  for(let i=pos-1;i>=a;i--){
+    const ch=b[i];
+    if(ch===')'){d++;continue;}
+    if(ch==='('){if(d>0)d--;continue;}
+    if(d===0&&/[A-Za-z]/.test(ch)&&!/[\w$]/.test(b[i-1]||' ')){const t=b.slice(i,i+20);for(const [re,r] of CLAUSES)if(re.test(t))return r;}
+  }
+  return 'other';
+}
+function columnHits(s,c){
+  const hits=[],seen=new Set(),b=s.blank;
+  s.defs.forEach(d=>{if(d.name===c){hits.push({role:d.pass?'pass':d.rename?'rename':'def',d,line:d.line});seen.add('d'+d.start);}});
+  const hasDef=hits.length>0;
+  const re=new RegExp('(?<![\\w$.])(?:[A-Za-z_][\\w$]*\\s*\\.\\s*)*'+escRe(c)+'(?![\\w$])','gi');
+  for(const m of b.matchAll(re)){
+    const end=m.index+m[0].length,pos=end-c.length,after=b.slice(end,end+20);
+    if(/^\s*\(/.test(after)||/^\s+AS\s*\(/i.test(after))continue;
+    if(/\b(FROM|JOIN|INTO|TABLE|UPDATE|EXISTS|WITH|VIEW)\s+$/i.test(b.slice(Math.max(0,m.index-25),m.index)))continue;
+    const d=s.defs.find(x=>pos>=x.start&&pos<x.end);
+    if(d){if(d.name===c)continue;const k='d'+d.start;if(seen.has(k))continue;seen.add(k);hits.push({role:'feeds',d,line:d.line});continue;}
+    const stm=s.stmts.find(x=>pos>=x[0]&&pos<=x[1])||[0];
+    const role=clauseRole(b,stm[0],pos);
+    if(role==='insert'&&hasDef)continue;
+    const line=s.lineOf(pos),k=role+':'+line;if(seen.has(k))continue;seen.add(k);
+    hits.push({role,line});
+  }
+  return hits.sort((x,y)=>x.line-y.line);
+}
+
+function analyze(files){
+  const scripts=[],pys=[],texts=[],mds=[];
+  files.forEach(f=>{
+    const ext=f.name.split('.').pop().toLowerCase();
+    if(ext==='md')mds.push(f);
+    else if(ext==='py')pys.push(parsePy(f));
+    else if(ext==='txt'&&!/\b(select\s[\s\S]*\bfrom|insert\s+(into|overwrite)|create\s+(or\s+replace\s+)?table)\b/i.test(f.text))texts.push(Object.assign({kind:'txt',lines:f.text.split('\n').length},f));
+    else scripts.push(parseSql(f));
+  });
+  // run order: the order number at the start of the name, compared as text left to right; ties by full name
+  // run order = Python sorted() of the file names (load_sqls in sachGiaoKhoa)
+  scripts.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0);
+  scripts.forEach(s=>{s.ext=s.name.split('.').pop().toLowerCase();s.executes=s.ext==='sql'&&!s.key.includes('/');});
+  scripts.forEach((s,i)=>s.idx=i);
+  // unify bare names with a single schema-qualified match
+  const byLast={};
+  scripts.forEach(s=>[...s.targets,...s.sources].forEach(n=>{if(n.includes('.')){const l=n.split('.').pop();(byLast[l]=byLast[l]||new Set()).add(n);}}));
+  const fix=n=>(!n.includes('.')&&byLast[n]&&byLast[n].size===1)?[...byLast[n]][0]:n;
+  scripts.forEach(s=>{s.targets=[...new Set(s.targets.map(fix))];s.sources=[...new Set(s.sources.map(fix))];});
+  // a file with no INSERT/CREATE is a plain SELECT: the executor names its result after the file
+  scripts.forEach(s=>{if(!s.targets.length&&/\bselect\b/i.test(stripSql(s.raw,false))&&s.logical){s.implicit=fix(s.logical.toLowerCase());s.targets=[s.implicit];}});
+  // after a run, a result is also readable as af_mon.<table_name>: map both names to the script's table
+  const alias=new Map();
+  scripts.forEach(s=>{if(!s.logical)return;const L=s.logical.toLowerCase();
+    const canon=s.targets.find(t=>t.split('.').pop()===L)||s.implicit||(s.targets.length===1?s.targets[0]:null);
+    if(!canon)return;s.canon=canon;[L,'af_mon.'+L].forEach(k=>{if(k!==canon&&!alias.has(k))alias.set(k,canon);});});
+  const byLogical=new Map();scripts.forEach(s=>{const L=(s.logical||'').toLowerCase();if(L&&!byLogical.has(L))byLogical.set(L,s);});
+  scripts.forEach(s=>{
+    s.monRefs=s.sources.filter(x=>x.startsWith('af_mon.')&&byLogical.has(x.slice(7))).map(x=>x.slice(7));
+    s.sources=[...new Set(s.sources.map(x=>alias.get(x)||x))].filter(x=>!s.targets.includes(x));
+  });
+  // incremental pattern: <base>_daily, <base>_backup, <base>_union feeding <base> (or <base>_final)
+  const families={};
+  scripts.forEach(s=>{const m=(s.logical||'').toLowerCase().match(/^(.+)_(daily|backup|union)$/);if(!m)return;
+    const fin=byLogical.get(m[1])||byLogical.get(m[1]+'_final');if(!fin||fin===s)return;
+    const f=families[m[1]]||(families[m[1]]={base:m[1],final:fin,daily:null,backup:null,union:null});if(!f[m[2]])f[m[2]]=s;});
+  Object.values(families).forEach(f=>{
+    f.final.fam=f.base;f.final.famRole='final';
+    ['daily','backup','union'].forEach(r=>{if(f[r]){f[r].fam=f.base;f[r].famRole=r;}});
+    if(f.daily){const t=stripSql(f.daily.raw,true);
+      const m=t.match(/(?:sysdate|current_date|current_timestamp|now|today)\s*(?:\(\s*\))?\s*-\s*(?:interval\s*)?'?\s*(\d+)/i)||t.match(/(?:date_sub|days_sub|subdate|adddate|date_add)\s*\([^,()]*(?:\([^()]*\))?[^,()]*,\s*(?:interval\s*)?-?\s*(\d+)/i);
+      f.lookback=m?+m[1]:null;}
+  });
+  // column index
+  const CI={},ge=n=>CI[n]||(CI[n]={defs:[],feeds:[],scripts:new Set()});
+  scripts.forEach(s=>{
+    try{parseColumns(s,fix);}catch(e){s.defs=[];s.stmts=[];s.blank=s.blank||'';s.rawLines=s.raw.split('\n');s.lineOf=()=>1;}
+    s.defs.forEach(d=>{const e=ge(d.name);e.defs.push({s,d});e.scripts.add(s);
+      if(!d.pass)d.refs.forEach(r=>{if(r!==d.name){const f=ge(r);f.feeds.push({s,d});f.scripts.add(s);}});});
+  });
+
+  const prod={},cons={};
+  scripts.forEach(s=>{s.targets.forEach(t=>(prod[t]=prod[t]||[]).push(s));s.sources.forEach(t=>(cons[t]=cons[t]||[]).push(s));s.up=new Set();s.down=new Set();});
+  const names=[...new Set([...Object.keys(prod),...Object.keys(cons)])].sort();
+  const tables=names.map(n=>{
+    const p=prod[n]||[],c=cons[n]||[],cx=c.filter(x=>!p.includes(x));
+    return {name:n,p,c,kind:!p.length?'source':/fact|agg/i.test(n.split('.').pop())?'output':'transformation'};
+  });
+  const emap=new Map();
+  scripts.forEach(s=>s.sources.forEach(t=>(prod[t]||[]).forEach(p=>{
+    if(p===s)return;
+    if(p.fam&&p.fam===s.fam&&p.famRole==='final'&&s.famRole==='backup'){s.prevRun=t;return;}
+    const k=p.idx+'>'+s.idx;
+    if(!emap.has(k))emap.set(k,{from:p,to:s,tables:[]});
+    emap.get(k).tables.push(t);p.down.add(s);s.up.add(p);
+  })));
+  const edges=[...emap.values()];
+  const memo=new Map(),stack=new Set();
+  const depth=s=>{if(memo.has(s))return memo.get(s);if(stack.has(s))return 0;stack.add(s);let d=0;s.up.forEach(p=>{d=Math.max(d,depth(p)+1);});stack.delete(s);memo.set(s,d);return d;};
+  scripts.forEach(s=>s.depth=depth(s));
+  pys.forEach(p=>{const low=p.raw.toLowerCase();p.tables=names.filter(n=>new RegExp('(^|[^\\w.])'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'($|[^\\w])').test(low));});
+  const layers=LAYER_ORDER.map(l=>({name:l,scripts:scripts.filter(s=>s.layer===l)})).filter(l=>l.scripts.length);
+  const counts={source:0,transformation:0,output:0};tables.forEach(t=>counts[t.kind]++);
+  const S={families:Object.values(families).sort((a,b)=>a.final.idx-b.final.idx),scripts,pys,texts,mds,tables,prod,cons,edges,layers,counts,colIndex:CI,colNames:Object.keys(CI).sort(),
+    engines:[...new Set(scripts.map(s=>s.engine).filter(Boolean))],
+    maxDepth:scripts.reduce((a,s)=>Math.max(a,s.depth),0)};
+  S.flags=buildFlags(S);
+  return S;
+}
+
+const bt=s=>'`'+String(s).replace(/`/g,"'")+'`';
+function buildFlags(S){
+  const G=[];
+  const multi=S.tables.filter(t=>t.p.length>1);
+  if(multi.length)G.push({title:'Tables written by more than one script',why:'Fine if each script writes a different slice or partition; otherwise one overwrites the other. Note which script owns the table.',items:multi.map(t=>bt(t.name)+' written by '+t.p.map(s=>bt(s.name)).join(', '))});
+  const ord=S.edges.filter(e=>e.from.idx>e.to.idx).map(e=>bt(e.to.name)+' reads '+e.tables.map(bt).join(', ')+' from '+bt(e.from.name)+', which runs later');
+  if(ord.length)G.push({title:'Possible run-order problems',why:'Scripts run by the order number at the start of the file name, so these read a table before the step that builds it has run. They get the previous run\u2019s data.',items:ord});
+  const cyc=S.edges.filter(e=>e.to.depth<=e.from.depth).map(e=>bt(e.from.name)+' and '+bt(e.to.name));
+  if(cyc.length)G.push({title:'Circular dependencies',why:'These scripts read from each other directly or through a chain. Check whether one reads an older snapshot on purpose.',items:cyc});
+  const noT=S.scripts.filter(s=>!s.targets.length);
+  if(noT.length)G.push({title:'No output table detected',why:'May be a SELECT-only check or ad hoc query, or uses syntax the parser did not recognise.',items:noT.map(s=>bt(s.name))});
+  const iso=S.scripts.filter(s=>s.targets.length&&!s.up.size&&!s.down.size);
+  if(iso.length)G.push({title:'Not connected to other scripts',why:'Reads only source tables and no other script reads its output. Either a standalone final output, or unused / legacy.',items:iso.map(s=>bt(s.name)+' writes '+s.targets.map(bt).join(', '))});
+  const fam={};
+  S.scripts.filter(s=>!s.fam).forEach(s=>{const k=s.logical.toLowerCase().replace(/(_(v?\d+|part\d+|backup|bak|old|new|copy|test|tmp|temp))+$/,'');(fam[k]=fam[k]||[]).push(s);});
+  const ver=Object.values(fam).filter(a=>a.length>1);
+  if(ver.length)G.push({title:'Look like versions of the same script',why:'Same base name. Note which one is live and mark or remove the rest.',items:ver.map(a=>a.map(s=>bt(s.name)).join(', '))});
+  const sus=[...S.scripts.filter(s=>!s.fam),...S.pys,...S.texts].filter(s=>/(^|[_.-])(test|tmp|temp|backup|bak|old|adhoc|ad_hoc|debug|copy|draft)([_.\d-]|$)/i.test(s.name));
+  if(sus.length)G.push({title:'Test, backup or ad hoc files',why:'Label them as not part of the production run so teammates know what is live.',items:sus.map(s=>bt(s.name))});
+  return {groups:G,total:G.reduce((a,g)=>a+g.items.length,0)};
+}
+
+/* ================= Graph ================= */
+function buildGraph(S,showSources,group){
+  if(group==null)group=true;
+  const NW=240,NH=30,VG=10,HG=80,PAD=16,TOP=34;
+  const off=showSources?1:0,nodes=[];let links=[];
+  const hidden=s=>group&&s.fam&&s.famRole!=='final';
+  const fin=new Map(S.families.map(f=>[f.base,f.final]));
+  const nid=s=>'s:'+(hidden(s)?fin.get(s.fam).idx:s.idx);
+  S.scripts.forEach(s=>{if(hidden(s))return;
+    const nh=group&&s.famRole==='final'?S.families.find(f=>f.final===s):null,k=nh?['daily','backup','union'].filter(r=>nh[r]).length:0;
+    nodes.push({id:'s:'+s.idx,label:(s.logical||s.name)+(k?' \u21BB':''),full:s.name+(k?' (incremental: daily + backup + union, '+k+' helper scripts grouped)':''),layer:s.layer,sk:String(s.idx).padStart(5,'0')});});
+  if(showSources){
+    S.tables.filter(t=>t.kind==='source').forEach(t=>nodes.push({id:'t:'+t.name,label:t.name,full:t.name+' (source table)',layer:'source',col:0,sk:t.name}));
+    S.scripts.forEach(s=>s.sources.forEach(tb=>{if(!S.prod[tb])links.push({from:'t:'+tb,to:nid(s),tables:[tb]});}));
+  }
+  S.edges.forEach(e=>links.push({from:nid(e.from),to:nid(e.to),tables:e.tables}));
+  const lm=new Map();links.forEach(l=>{if(l.from===l.to)return;const k=l.from+'>'+l.to;if(lm.has(k))lm.get(k).tables.push(...l.tables);else lm.set(k,{from:l.from,to:l.to,tables:[...l.tables]});});
+  links=[...lm.values()];links.forEach(l=>l.tables=[...new Set(l.tables)]);
+  const byId={};nodes.forEach(n=>byId[n.id]=n);
+  const pr={};links.forEach(l=>{if(l.from.startsWith('s:'))(pr[l.to]=pr[l.to]||[]).push(l.from);});
+  const dm=new Map(),stk=new Set();
+  const dep=id=>{if(dm.has(id))return dm.get(id);if(stk.has(id))return 0;stk.add(id);let d=0;(pr[id]||[]).forEach(p=>{d=Math.max(d,dep(p)+1);});stk.delete(id);dm.set(id,d);return d;};
+  nodes.forEach(n=>{if(n.id.startsWith('s:'))n.col=dep(n.id)+off;});
+  const cols={};nodes.forEach(n=>(cols[n.col]=cols[n.col]||[]).push(n));
+  const ncol=Object.keys(cols).length?Math.max(...Object.keys(cols).map(Number))+1:0;
+  for(let c=0;c<ncol;c++){(cols[c]=cols[c]||[]).sort((a,b)=>LI(a.layer)-LI(b.layer)||a.sk.localeCompare(b.sk));cols[c].forEach((n,i)=>n.row=i);}
+  const preds={};links.forEach(l=>(preds[l.to]=preds[l.to]||[]).push(l.from));
+  for(let pass=0;pass<2;pass++)for(let c=1;c<ncol;c++){
+    cols[c].forEach(n=>{const p=(preds[n.id]||[]).map(id=>byId[id]).filter(x=>x&&x.col<c);n.bc=p.length?p.reduce((a,x)=>a+x.row,0)/p.length:n.row;});
+    cols[c].sort((a,b)=>a.bc-b.bc);cols[c].forEach((n,i)=>n.row=i);
+  }
+  let maxRows=0;
+  for(let c=0;c<ncol;c++){maxRows=Math.max(maxRows,cols[c].length);cols[c].forEach(n=>{n.x=PAD+c*(NW+HG);n.y=TOP+n.row*(NH+VG);});}
+  const W=PAD*2+Math.max(1,ncol)*(NW+HG)-HG,H=TOP+maxRows*(NH+VG)+PAD;
+  let svg='<svg xmlns="http://www.w3.org/2000/svg" class="lineage" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" font-family="system-ui,-apple-system,Segoe UI,sans-serif" font-size="12" data-w="'+W+'">';
+  for(let c=0;c<ncol;c++){const lab=(showSources&&c===0)?'Source tables':'Step '+(c-off+1);svg+='<text x="'+(PAD+c*(NW+HG))+'" y="20" style="fill:var(--muted,#6a6963)" font-size="11" font-weight="600">'+esc(lab.toUpperCase())+'</text>';}
+  svg+='<g class="edges">'+links.map(l=>{const a=byId[l.from],b=byId[l.to];if(!a||!b)return'';
+    const x1=a.x+NW,y1=a.y+NH/2,x2=b.x,y2=b.y+NH/2,mx=x2>x1?(x1+x2)/2:x1+40;
+    const d=x2>x1?'M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2:'M'+x1+','+y1+' C'+(x1+60)+','+y1+' '+(x2-60)+','+y2+' '+x2+','+y2;
+    return '<path data-from="'+esc(l.from)+'" data-to="'+esc(l.to)+'" d="'+d+'" fill="none" stroke="#8a8a84" stroke-opacity=".5" stroke-width="1.2"><title>'+esc(l.tables.join(', '))+'</title></path>';}).join('')+'</g>';
+  svg+='<g class="nodes">'+nodes.map(n=>{const c=LAYER_COLOR[n.layer]||LAYER_COLOR.other;const lab=n.label.length>34?n.label.slice(0,33)+'\u2026':n.label;
+    return '<g class="node" data-id="'+esc(n.id)+'" transform="translate('+n.x+','+n.y+')" style="cursor:pointer"><title>'+esc(n.full)+'</title><rect width="'+NW+'" height="'+NH+'" rx="6" fill="'+c+'" fill-opacity=".14" stroke="'+c+'" stroke-width="1.2"/><rect width="4" height="'+NH+'" rx="2" fill="'+c+'"/><text x="12" y="'+(NH/2+4)+'" style="fill:var(--ink,#1c1c1a)">'+esc(lab)+'</text></g>';}).join('')+'</g></svg>';
+  return {svg,links,W};
+}
+function legendHtml(S,withSource){
+  const ls=S.layers.map(l=>l.name);if(withSource)ls.push('source');
+  return '<div class="legend">'+ls.map(l=>'<span><span class="dot" style="background:'+LAYER_COLOR[l]+'"></span>'+esc(l==='source'?'source table':l)+'</span>').join('')+'</div>';
+}
+
+/* ================= Markdown / HTML export ================= */
+const cell=s=>String(s==null?'':s).replace(/\|/g,'\\|').replace(/\s*\n\s*/g,' ').trim();
+function mdInline(s){
+  return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,:;]|$)/g,'$1<em>$2</em>');
+}
+function mdToHtml(md,graph,heads){
+  const lines=md.split('\n');let html='',i=0;const slug=slugger();
+  const cells=r=>r.replace(/^\|/,'').replace(/\|\s*$/,'').split(/(?<!\\)\|/).map(c=>c.replace(/\\\|/g,'|').trim());
+  while(i<lines.length){
+    const l=lines[i];let m;
+    if(l==='[[GRAPH]]'){html+='<div class="graph">'+graph+'</div>';i++;continue;}
+    if((m=l.match(/^(#{1,4})\s+(.*)/))){const n=m[1].length,inner=mdInline(m[2]),id=slug(inner);if(heads)heads.push({n,id,html:inner});html+='<h'+n+' id="'+id+'">'+inner+'</h'+n+'>';i++;continue;}
+    if(l.startsWith('|')){const rows=[];while(i<lines.length&&lines[i].startsWith('|')){rows.push(lines[i]);i++;}
+      html+='<div class="tw"><table><thead><tr>'+cells(rows[0]).map(c=>'<th>'+mdInline(c)+'</th>').join('')+'</tr></thead><tbody>'+rows.slice(2).map(r=>'<tr>'+cells(r).map(c=>'<td>'+mdInline(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';continue;}
+    if(/^\d+\. /.test(l)){html+='<ol>';while(i<lines.length&&/^(\d+\. |   )/.test(lines[i])){
+        let item=mdInline(lines[i].replace(/^\d+\. /,''));i++;
+        const sub=[];while(i<lines.length&&/^   [-*] /.test(lines[i])){sub.push('<li>'+mdInline(lines[i].replace(/^   [-*] /,''))+'</li>');i++;}
+        html+='<li>'+item+(sub.length?'<ul>'+sub.join('')+'</ul>':'')+'</li>';}html+='</ol>';continue;}
+    if(/^\s*[-*] /.test(l)){html+='<ul>';while(i<lines.length&&/^\s*[-*] /.test(lines[i])){html+='<li>'+mdInline(lines[i].replace(/^\s*[-*] /,''))+'</li>';i++;}html+='</ul>';continue;}
+    if(!l.trim()){i++;continue;}
+    const para=[];while(i<lines.length&&lines[i].trim()&&!/^(#{1,4}\s|\||\s*[-*] |\d+\. |\[\[GRAPH)/.test(lines[i])){para.push(lines[i]);i++;}
+    html+='<p>'+para.map(mdInline).join('<br>')+'</p>';
+  }
+  return html;
+}
+
+
+/* ===== Python tokenizer + parser (syntax check and literal reading) =====
+   Reports the first syntax error the way Python would, plus a few "valid but
+   probably a typo" warnings (implicit string joins in lists, duplicate dict keys). */
+const PY_KW=new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' '));
+const PY_OPS=['**=','//=','>>=','<<=','...','->',':=','**','//','>>','<<','<=','>=','==','!=','+=','-=','*=','/=','%=','&=','|=','^=','@=','+','-','*','/','%','@','&','|','^','~','<','>','(',')','[',']','{','}',',',':','.',';','='];
+const PY_CLOSE={')':'(',']':'[','}':'{'};
+class PySyntaxError extends Error{constructor(msg,line,col,hint){super(msg);this.line=line;this.col=col;this.hint=hint||'';}}
+
+function pyTokenize(src){
+  const toks=[],brackets=[],indents=[0];
+  let i=0,line=1,col=0,atStart=true,n=src.length,sawTab=false,sawSpace=false;
+  const err=(m,l,c,h)=>{throw new PySyntaxError(m,l==null?line:l,c==null?col:c,h);};
+  const push=(t,v,l,c,extra)=>{const o={t,v,line:l,col:c};if(extra)Object.assign(o,extra);toks.push(o);return o;};
+  const adv=k=>{for(let j=0;j<k;j++){if(src[i]==='\n'){line++;col=0;}else col++;i++;}};
+  if(src.charCodeAt(0)===0xFEFF)i=1;
+  while(i<n){
+    if(atStart&&!brackets.length){
+      // measure indentation
+      let w=0,j=i,tabs=false,spaces=false;
+      while(j<n&&(src[j]===' '||src[j]==='\t'||src[j]==='\f')){if(src[j]==='\t'){w=(Math.floor(w/8)+1)*8;tabs=true;}else if(src[j]===' '){w++;spaces=true;}j++;}
+      const ch=src[j];
+      if(j>=n)break;
+      if(ch==='\n'||ch==='#'||(ch==='\r'&&src[j+1]==='\n')){ // blank or comment line
+        adv(j-i);
+        if(ch==='#'){while(i<n&&src[i]!=='\n')adv(1);}
+        if(src[i]==='\r')adv(1);
+        if(src[i]==='\n')adv(1);
+        continue;
+      }
+      if(ch==='\\'&&(src[j+1]==='\n'||src[j+1]==='\r')){adv(j-i);adv(src[j+1]==='\r'?3:2);continue;}
+      if(tabs)sawTab=true;if(spaces)sawSpace=true;
+      adv(j-i);
+      const top=indents[indents.length-1];
+      if(w>top){
+        if(!toks.length||toks[toks.length-1].t!=='newline'||!toks.length)err('unexpected indent',line,0,'This line is indented more than the line before it, but the line before doesn\u2019t end with ":".');
+        indents.push(w);push('indent','',line,0);
+      }else if(w<top){
+        while(indents.length&&w<indents[indents.length-1]){indents.pop();push('dedent','',line,0);}
+        if(w!==indents[indents.length-1])err('unindent does not match any outer indentation level',line,0,'The indentation of this line doesn\u2019t line up with any block above it. Check spaces vs tabs.');
+      }
+      atStart=false;
+    }
+    const c=src[i];
+    if(c==='\n'){
+      if(!brackets.length){const last=toks[toks.length-1];if(last&&last.t!=='newline'&&last.t!=='indent'&&last.t!=='dedent')push('newline','',line,col);atStart=true;}
+      adv(1);continue;
+    }
+    if(c===' '||c==='\t'||c==='\f'||c==='\r'){adv(1);continue;}
+    if(c==='#'){while(i<n&&src[i]!=='\n')adv(1);continue;}
+    if(c==='\\'){
+      if(src[i+1]==='\n'){adv(2);continue;}
+      if(src[i+1]==='\r'&&src[i+2]==='\n'){adv(3);continue;}
+      err('unexpected character after line continuation character',line,col,'A backslash "\\" must be the last character on the line.');
+    }
+    // strings (with prefixes)
+    const pm=/^([rRbBuUfF]{0,2})(['"])/.exec(src.slice(i,i+4));
+    if(pm&&(pm[1]===''||/^(r|u|f|b|br|rb|fr|rf)$/i.test(pm[1]))){
+      const q=pm[2],sl=line,sc=col,pre=pm[1].toLowerCase();
+      const tri=src.substr(i+pm[1].length,3)===q+q+q;
+      let j=i+pm[1].length+(tri?3:1);const startBody=j;
+      let fdepth=0;const isF=pre.includes('f');
+      for(;;){
+        if(isF&&j<n){
+          const ch0=src[j];
+          if(ch0==='{'){if(src[j+1]==='{'&&fdepth===0){j+=2;continue;}fdepth++;j++;continue;}
+          if(ch0==='}'&&fdepth>0){fdepth--;j++;continue;}
+          if(fdepth>0&&(ch0==='"'||ch0==="'")){const qq=ch0;let k=j+1;while(k<n&&src[k]!==qq&&src[k]!=='\n'){if(src[k]==='\\')k++;k++;}j=k+1;continue;}
+        }
+        if(j>=n)err(tri?'unterminated triple-quoted string literal (started on line '+sl+')':'unterminated string literal',sl,sc,tri?'A string that starts with '+q+q+q+' is never closed.':'This string has no closing '+q+' on the same line.');
+        const ch=src[j];
+        if(ch==='\\'){j+=2;continue;}
+        if(!tri&&ch==='\n')err('unterminated string literal',sl,sc,'This string has no closing '+q+' on the same line. Did you forget a quote?');
+        if(tri?src.substr(j,3)===q+q+q:ch===q)break;
+        j++;
+      }
+      const body=src.slice(startBody,j);j+=tri?3:1;
+      let v=body;
+      if(!pre.includes('r'))v=body.replace(/\\(\r?\n|\\|'|"|n|t|r|0)/g,(m,x)=>x==='n'?'\n':x==='t'?'\t':x==='r'?'\r':x==='0'?'\0':/\n/.test(x)?'':x);
+      push('str',v,sl,sc,{f:pre.includes('f'),b:pre.includes('b'),endLine:null});
+      adv(j-i);toks[toks.length-1].endLine=line;continue;
+    }
+    const nm=/^(?:0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?\d[\d_]*)?[jJ]?)/.exec(src.slice(i,i+80));
+    if(nm&&/[\d.]/.test(c)&&!(c==='.'&&!/\d/.test(src[i+1]||''))){
+      const after=src[i+nm[0].length]||'';
+      if(/[A-Za-z_]/.test(after))err('invalid decimal literal',line,col,'A number is directly followed by letters. Is a space or operator missing?');
+      push('num',nm[0],line,col);adv(nm[0].length);continue;
+    }
+    const idm=/^[A-Za-z_\u00A0-\uFFFF][\w\u00A0-\uFFFF]*/.exec(src.slice(i,i+200));
+    if(idm){push(PY_KW.has(idm[0])?'kw':'name',idm[0],line,col);adv(idm[0].length);continue;}
+    let op=null;for(const o of PY_OPS){if(src.startsWith(o,i)){op=o;break;}}
+    if(!op){
+      if(c==='!')err('invalid syntax: "!" on its own',line,col,'Python uses "not" or "!=" \u2014 a single "!" is not valid.');
+      err('invalid character '+JSON.stringify(c),line,col,c==='$'?'"$" is not valid in Python code. Is it meant to be inside a string?':c==='`'?'Backticks are not valid in Python.':'This character is not valid in Python code.');
+    }
+    if('([{'.includes(op))brackets.push({ch:op,line,col});
+    else if(')]}'.includes(op)){
+      const top=brackets.pop();
+      if(!top)err('unmatched \''+op+'\'',line,col,'There is a closing "'+op+'" with no opening bracket before it.');
+      if(top.ch!==PY_CLOSE[op])err('closing parenthesis \''+op+'\' does not match opening parenthesis \''+top.ch+'\''+(top.line!==line?' on line '+top.line:''),line,col,'Brackets are mixed up: "'+top.ch+'" (line '+top.line+') is closed with "'+op+'".');
+    }
+    push('op',op,line,col);adv(op.length);
+  }
+  if(brackets.length){const b=brackets[brackets.length-1];err('\''+b.ch+'\' was never closed',b.line,b.col,'The "'+b.ch+'" opened on line '+b.line+' has no matching "'+({'(':')','[':']','{':'}'})[b.ch]+'".');}
+  const last=toks[toks.length-1];
+  if(last&&last.t!=='newline'&&last.t!=='dedent')push('newline','',line,col);
+  while(indents.length>1){indents.pop();push('dedent','',line,0);}
+  push('eof','',line,col);
+  return {toks,mixedIndent:sawTab&&sawSpace};
+}
+
+/* ---------- parser ---------- */
+function pyParse(src){
+  const res={ok:true,error:null,warnings:[],body:[]};
+  let T;
+  try{const tk=pyTokenize(src);T=tk.toks;if(tk.mixedIndent)res.warnings.push({line:1,msg:'This file mixes tabs and spaces for indentation.',hint:'Python may read the indentation differently from how it looks. Use spaces only.'});}
+  catch(e){if(e instanceof PySyntaxError){res.ok=false;res.error=e;return res;}throw e;}
+  let p=0;
+  const peek=(k)=>T[p+(k||0)];
+  const at=(t,v)=>{const x=T[p];return x.t===t&&(v===undefined||x.v===v);};
+  const isOp=v=>at('op',v),isKw=v=>at('kw',v);
+  const desc=x=>x.t==='eof'?'end of file':x.t==='newline'?'end of line':x.t==='indent'?'an indented line':x.t==='dedent'?'end of block':x.t==='str'?'a string':x.t==='num'?'a number':'"'+x.v+'"';
+  const fail=(msg,tok,hint)=>{tok=tok||T[p];throw new PySyntaxError(msg,tok.line,tok.col,hint);};
+  const next=()=>T[p++];
+  const expectOp=(v,ctx,hint)=>{if(isOp(v))return next();fail('expected "'+v+'"'+(ctx?' '+ctx:'')+' but found '+desc(T[p]),T[p],hint);};
+  const startsExpr=x=>x.t==='name'||x.t==='num'||x.t==='str'||(x.t==='op'&&['(','[','{','-','+','~','*','**','...'].includes(x.v))||(x.t==='kw'&&['None','True','False','not','lambda','await','yield'].includes(x.v));
+  const N=(k,tok,o)=>Object.assign({k,line:tok.line,col:tok.col},o||{});
+
+  function file(){
+    const body=[];
+    while(!at('eof')){if(at('newline')){next();continue;}if(at('indent'))fail('unexpected indent',T[p],'This line is indented but nothing above it opens a block.');body.push(...stmt());}
+    return body;
+  }
+  function suite(){
+    if(at('newline')){next();if(!at('indent'))fail('expected an indented block',T[p],'The line before ends with ":", so the next line must be indented.');next();
+      const b=[];while(!at('dedent')&&!at('eof')){if(at('newline')){next();continue;}b.push(...stmt());}if(at('dedent'))next();return b;}
+    return simpleStmts();
+  }
+  function stmt(){
+    const x=T[p];
+    if(x.t==='kw'){
+      switch(x.v){
+        case 'if':{next();namedTest();if(isOp('='))fail('"=" assigns a value; to compare inside "if" use "=="',T[p]);expectOp(':','after the if condition','Every "if" line must end with ":".');const b=suite();const o=N('If',x,{body:b,orelse:[]});
+          while(isKw('elif')){next();namedTest();expectOp(':','after elif');o.orelse.push(...suite());}
+          if(isKw('else')){next();expectOp(':','after else');o.orelse.push(...suite());}return [o];}
+        case 'while':{next();namedTest();expectOp(':','after the while condition');const b=suite();if(isKw('else')){next();expectOp(':');suite();}return [N('While',x,{body:b})];}
+        case 'for':{next();targetList();if(!isKw('in'))fail('expected "in" in the for loop but found '+desc(T[p]));next();testList();expectOp(':','at the end of the for line','Every "for" line must end with ":".');const b=suite();if(isKw('else')){next();expectOp(':');suite();}return [N('For',x,{body:b})];}
+        case 'try':{next();expectOp(':','after try');const b=suite();let any=false;
+          while(isKw('except')){any=true;next();if(isOp('*'))next();if(!isOp(':')){test();if(isKw('as')){next();if(!at('name'))fail('expected a name after "as"');next();}else if(isOp(',')){fail('use "except (A, B):" or "except A as e:" \u2014 "except A, B:" is Python 2 syntax');}}expectOp(':','after except');suite();}
+          if(isKw('else')){next();expectOp(':');suite();}
+          if(isKw('finally')){any=true;next();expectOp(':');suite();}
+          if(!any)fail('"try" needs an "except" or "finally" block',T[p]);return [N('Try',x,{body:b})];}
+        case 'with':{next();
+          if(isOp('(')&&parenWithAs()){next();do{if(isOp(')'))break;test();if(isKw('as')){next();target();}}while(isOp(',')&&next());expectOp(')','to close the with items');expectOp(':','at the end of the with line');return [N('With',x,{body:suite()})];}
+          do{test();if(isKw('as')){next();target();}}while(isOp(',')&&next());expectOp(':','at the end of the with line');return [N('With',x,{body:suite()})];}
+        case 'def':return [funcdef()];
+        case 'class':{next();if(!at('name'))fail('expected a class name');next();skipGeneric();if(isOp('(')){next();callArgs(')');}expectOp(':','after the class line');return [N('Class',x,{body:suite()})];}
+        case 'async':{next();if(isKw('def'))return [funcdef()];if(isKw('for')||isKw('with'))return stmt();fail('"async" must be followed by def, for or with');}
+        case 'elif':case 'else':case 'except':case 'finally':fail('"'+x.v+'" without a matching '+(x.v==='elif'||x.v==='else'?'"if" (or the indentation is wrong)':'"try"'),x,'Check that this line is indented the same as the block it belongs to.');
+      }
+    }
+    if(at('name','match')&&lineEndsWithColon()&&!(peek(1).t==='op'&&['=','.','(','[',',',')'].includes(peek(1).v)&&!lineHasTopColonAfter())){return [matchStmt()];}
+    if(at('name','type')&&peek(1).t==='name'&&(peek(2).t==='op'&&(peek(2).v==='='||peek(2).v==='['))){const x=next();while(!at('newline')&&!at('eof'))next();next();return [N('Pass',x)];}
+    if(isOp('@')){while(isOp('@')){next();namedTest();if(!at('newline'))fail('expected end of line after the decorator');next();}if(!(isKw('def')||isKw('class')||isKw('async')))fail('a decorator must be followed by def or class');return stmt();}
+    return simpleStmts();
+  }
+  function lineEndsWithColon(){let d=0;for(let k=p;k<T.length;k++){const t=T[k];if(t.t==='newline'||t.t==='eof')return false;if(t.t==='op'){if('([{'.includes(t.v))d++;else if(')]}'.includes(t.v))d--;else if(t.v===':'&&d===0){const nx=T[k+1];return nx.t==='newline';}}}return false;}
+  function lineHasTopColonAfter(){return true;}
+  function skipToColonNewline(){let d=0;while(!at('eof')){const t=T[p];if(t.t==='op'){if('([{'.includes(t.v))d++;else if(')]}'.includes(t.v))d--;else if(t.v===':'&&d===0&&T[p+1].t==='newline'){next();return;}}if(t.t==='newline')fail('expected ":" at the end of this line',t);next();}}
+  function matchStmt(){const x=next();skipToColonNewline();if(!at('newline'))fail('expected end of line after match');next();if(!at('indent'))fail('expected an indented block of "case" lines');next();
+    while(!at('dedent')&&!at('eof')){if(at('newline')){next();continue;}if(!at('name','case'))fail('expected "case" inside match',T[p]);next();skipToColonNewline();suite();}
+    if(at('dedent'))next();return N('Match',x);}
+  function parenWithAs(){let d=0;for(let k=p;k<T.length;k++){const t=T[k];if(t.t==='op'){if('([{'.includes(t.v))d++;else if(')]}'.includes(t.v)){d--;if(d===0)return T[k+1]&&T[k+1].t==='op'&&T[k+1].v===':'&&false;}}if(t.t==='kw'&&t.v==='as'&&d===1)return true;if(t.t==='newline'||t.t==='eof')return false;}return false;}
+  function skipGeneric(){if(isOp('[')){let d=0;do{if(isOp('['))d++;else if(isOp(']'))d--;next();}while(d>0&&!at('eof'));}}
+  function funcdef(){const x=next();if(!at('name'))fail('expected a function name after def');next();skipGeneric();expectOp('(','after the function name');params(')',true);expectOp(')','to close the parameter list');if(isOp('->')){next();test();}expectOp(':','at the end of the def line','A "def" line must end with ":".');return N('Def',x,{body:suite()});}
+  function params(close,ann){
+    while(!isOp(close)){
+      if(isOp('/')||isOp('*')){next();if(at('name')){next();if(ann&&isOp(':')){next();test();}}}
+      else if(isOp('**')){next();if(!at('name'))fail('expected a name after **');next();if(ann&&isOp(':')){next();test();}}
+      else if(at('name')){next();if(ann&&isOp(':')){next();test();}if(isOp('=')){next();test();}}
+      else fail('invalid parameter: found '+desc(T[p]));
+      if(isOp(','))next();else if(!isOp(close))fail('expected "," or "'+close+'" in the parameter list but found '+desc(T[p]));
+    }
+  }
+  function simpleStmts(){
+    const out=[small()];
+    while(isOp(';')){next();if(at('newline')||at('eof'))break;out.push(small());}
+    if(!at('newline')&&!at('eof')){
+      const x=T[p],prev=T[p-1];
+      if(startsExpr(x)&&prev&&(prev.t==='str'||prev.t==='name'||prev.t==='num'||(prev.t==='op'&&[')',']','}'].includes(prev.v))))fail('invalid syntax: two expressions next to each other',x,'Something is missing between them \u2014 often a comma, an operator, or a closing bracket.');
+      fail('invalid syntax: unexpected '+desc(x),x);
+    }
+    next();return out;
+  }
+  function small(){
+    const x=T[p];
+    if(x.t==='kw'){
+      switch(x.v){
+        case 'pass':case 'break':case 'continue':next();return N('Pass',x);
+        case 'return':next();if(!at('newline')&&!isOp(';'))testListStar();return N('Return',x);
+        case 'raise':next();if(!at('newline')&&!isOp(';')){test();if(isKw('from')){next();test();}}return N('Raise',x);
+        case 'global':case 'nonlocal':next();do{if(!at('name'))fail('expected a name');next();}while(isOp(',')&&next());return N('Global',x);
+        case 'del':next();testList();return N('Del',x);
+        case 'assert':next();test();if(isOp(',')){next();test();}return N('Assert',x);
+        case 'yield':yieldExpr();return N('Expr',x);
+        case 'import':{next();const names=[];do{names.push(dotted());if(isKw('as')){next();if(!at('name'))fail('expected a name after "as"');next();}}while(isOp(',')&&next());return N('Import',x,{names});}
+        case 'from':{next();let mod='';while(isOp('.')||isOp('...')){mod+=next().v;}if(at('name'))mod+=dotted();if(!isKw('import'))fail('expected "import" after "from '+mod+'"');next();
+          if(isOp('*')){next();return N('ImportFrom',x,{mod,names:['*']});}
+          const paren=isOp('(');if(paren)next();const names=[];
+          do{if(paren&&isOp(')'))break;if(!at('name'))fail('expected a name to import but found '+desc(T[p]));names.push(next().v);if(isKw('as')){next();next();}}while(isOp(',')&&next());
+          if(paren)expectOp(')');return N('ImportFrom',x,{mod,names});}
+      }
+    }
+    // expression statement / assignment
+    const first=testListStar();
+    if(isOp('=')){
+      const targets=[first];let value;
+      while(isOp('=')){const eq=next();if(at('newline')||at('eof'))fail('nothing after "="',eq,'An assignment needs a value on the right.');
+        value=isKw('yield')?yieldExpr():testListStar();targets.push(value);}
+      targets.pop();
+      targets.forEach(t=>checkTarget(t));
+      return N('Assign',x,{targets,value});
+    }
+    if(at('op')&&/^(\+|-|\*|\/|\/\/|%|@|&|\||\^|>>|<<|\*\*)=$/.test(T[p].v)){next();checkTarget(first);const value=isKw('yield')?yieldExpr():testList();return N('AugAssign',x,{target:first,value});}
+    if(isOp(':')){next();test();let value=null;if(isOp('=')){next();value=test();}return N('AnnAssign',x,{target:first,value});}
+    return N('Expr',x,{value:first});
+  }
+  function checkTarget(t){
+    if(t.k==='Name'||t.k==='Attr'||t.k==='Sub'||t.k==='Starred')return;
+    if(t.k==='Tuple'||t.k==='List'){t.elts.forEach(checkTarget);return;}
+    fail(t.k==='Const'?'cannot assign to a literal':t.k==='Call'?'cannot assign to a function call':'cannot assign to this expression',t,'The left side of "=" must be a name. Did you mean "==" (compare)?');
+  }
+  function dotted(){if(!at('name'))fail('expected a module name but found '+desc(T[p]));let s=next().v;while(isOp('.')){next();if(!at('name'))fail('expected a name after "."');s+='.'+next().v;}return s;}
+  function yieldExpr(){const x=next();if(isKw('from')){next();test();}else if(!isOp(')')&&!at('newline')&&!isOp('='))testListStar();return N('Other',x);}
+  function targetList(){const t=testListStar(true);return t;}
+  function target(){return orExpr();}
+  function testList(){const x=T[p];const a=test();if(!isOp(','))return a;const elts=[a];while(isOp(',')){next();if(!startsExpr(T[p]))break;elts.push(test());}return N('Tuple',x,{elts});}
+  function testListStar(noIn){const x=T[p];const one=()=>isOp('*')?(next(),N('Starred',x,{v:noIn?orExpr():orExpr()})):(noIn?orExpr():test());
+    const a=one();if(!isOp(','))return a;const elts=[a];while(isOp(',')){next();if(!startsExpr(T[p]))break;elts.push(one());}return N('Tuple',x,{elts});}
+  function namedTest(){if(at('name')&&peek(1).t==='op'&&peek(1).v===':='){const x=next();next();return N('Named',x,{v:test()});}return test();}
+  function test(){
+    const x=T[p];
+    if(isKw('lambda')){next();params(':',false);expectOp(':','in the lambda');return N('Other',x,{v:test()});}
+    const a=orTest();
+    if(isKw('if')){next();orTest();if(!isKw('else'))fail('expected "else" in the "x if cond else y" expression but found '+desc(T[p]),T[p]);next();test();return N('Other',x);}
+    return a;
+  }
+  function orTest(){let a=andTest();while(isKw('or')){const o=next();andTest();a=N('Other',o);}return a;}
+  function andTest(){let a=notTest();while(isKw('and')){const o=next();notTest();a=N('Other',o);}return a;}
+  function notTest(){if(isKw('not')){const x=next();notTest();return N('Other',x);}return comparison();}
+  function comparison(){let a=orExpr();
+    for(;;){
+      if(at('op')&&['<','>','==','>=','<=','!='].includes(T[p].v)){const o=next();if(!startsExpr(T[p]))fail('nothing after "'+o.v+'"',T[p]);orExpr();a=N('Other',o);continue;}
+      if(isKw('in')||isKw('is')){const o=next();if(o.v==='is'&&isKw('not'))next();orExpr();a=N('Other',o);continue;}
+      if(isKw('not')&&peek(1).t==='kw'&&peek(1).v==='in'){const o=next();next();orExpr();a=N('Other',o);continue;}
+      return a;
+    }
+  }
+  function binLevel(ops,nextFn){return function(){let a=nextFn();while(at('op')&&ops.includes(T[p].v)){const o=next();if(!startsExpr(T[p]))fail('nothing after "'+o.v+'"',T[p],'An operator needs a value on both sides.');const b=nextFn();a=N('BinOp',o,{op:o.v,l:a,r:b});}return a;};}
+  function factor(){if(at('op')&&['+','-','~'].includes(T[p].v)){const o=next();const v=factor();return N('Unary',o,{op:o.v,v});}return power();}
+  function power(){if(isKw('await')){next();}const a=atomExpr();if(isOp('**')){const o=next();const b=factor();return N('BinOp',o,{op:'**',l:a,r:b});}return a;}
+  const term=binLevel(['*','/','//','%','@'],factor),arith=binLevel(['+','-'],term),shift=binLevel(['<<','>>'],arith),band=binLevel(['&'],shift),bxor=binLevel(['^'],band);
+  const orExpr=binLevel(['|'],bxor);
+  function atomExpr(){
+    let a=atom();
+    for(;;){
+      if(isOp('(')){const o=next();const r=callArgs(')');a=N('Call',o,{func:a,args:r.args,kws:r.kws,line:a.line,col:a.col});continue;}
+      if(isOp('[')){const o=next();subscripts();expectOp(']','to close the index');a=N('Sub',o,{obj:a,line:a.line,col:a.col});continue;}
+      if(isOp('.')){next();if(!at('name')&&!at('kw'))fail('expected a name after "."',T[p]);const nm=next();a=N('Attr',nm,{obj:a,attr:nm.v,line:a.line,col:a.col});continue;}
+      return a;
+    }
+  }
+  function subscripts(){do{if(isOp(']'))break;if(!isOp(':'))isOp('*')?(next(),orExpr()):test();if(isOp(':')){next();if(!isOp(']')&&!isOp(',')&&!isOp(':'))test();if(isOp(':')){next();if(!isOp(']')&&!isOp(','))test();}}}while(isOp(',')&&next());}
+  function callArgs(close){
+    const args=[],kws=[];const open=T[p-1];
+    while(!isOp(close)){
+      if(isOp(','))fail('extra comma: "," with nothing before it',T[p],'Remove the extra ",".');
+      const x=T[p];
+      if(isOp('*')||isOp('**')){next();args.push(N('Starred',x,{v:test()}));}
+      else if(at('name')&&peek(1).t==='op'&&peek(1).v==='='){const nm=next();next();kws.push({name:nm.v,value:test(),line:nm.line});}
+      else{const v=namedTest();if(isKw('for')||isKw('async')){compFor();}args.push(v);}
+      if(isOp(','))next();
+      else if(!isOp(close))missingSep(close,open);
+    }
+    next();
+    lintStrings(args,'call');
+    return {args,kws};
+  }
+  function missingSep(close,open){
+    const x=T[p];
+    if(x.t==='newline'||x.t==='eof')fail('"'+open.v+'" opened on line '+open.line+' was never closed',open);
+    if(startsExpr(x))fail('missing comma? Expected "," or "'+close+'" but found '+desc(x),x,'Two items are next to each other with nothing between them. Add a "," between them.');
+    fail('expected "," or "'+close+'" but found '+desc(x),x);
+  }
+  function compFor(){while(isKw('for')||isKw('async')){if(isKw('async'))next();next();targetList();if(!isKw('in'))fail('expected "in" in the comprehension');next();orTest();while(isKw('if')){next();orTest();}}}
+  function seq(close,kind,open){
+    // list, tuple, set display; returns elts
+    const elts=[];let first=true;
+    while(!isOp(close)){
+      if(isOp(','))fail(first?'extra comma: "," right after "'+open.v+'"':'extra comma: two commas in a row',T[p],'Remove the extra ",".');
+      const x=T[p];const v=isOp('*')?(next(),N('Starred',x,{v:orExpr()})):namedTest();
+      if(first&&(isKw('for')||isKw('async'))){compFor();if(!isOp(close))fail('expected "'+close+'" after the comprehension but found '+desc(T[p]));next();return {elts:[v],comp:true};}
+      elts.push(v);first=false;
+      if(isOp(','))next();else if(!isOp(close))missingSep(close,open);
+    }
+    next();return {elts};
+  }
+  function atom(){
+    const x=T[p];
+    if(x.t==='name'){next();return N('Name',x,{id:x.v});}
+    if(x.t==='num'){next();return N('Const',x,{v:Number(x.v.replace(/_/g,''))||0});}
+    if(x.t==='str'){
+      const parts=[next()];while(at('str'))parts.push(next());
+      const n=N('Const',x,{v:parts.map(s=>s.v).join(''),str:true,f:parts.some(s=>s.f),parts:parts.length,lines:[...new Set(parts.map(s=>s.line))]});return n;
+    }
+    if(x.t==='kw'&&(x.v==='None'||x.v==='True'||x.v==='False')){next();return N('Const',x,{v:x.v==='None'?null:x.v==='True'});}
+    if(isOp('...')){next();return N('Const',x,{v:'...'});}
+    if(isOp('(')){next();if(isOp(')')){next();return N('Tuple',x,{elts:[]});}
+      if(isKw('yield')){yieldExpr();expectOp(')');return N('Other',x);}
+      const first=isOp('*')?(next(),N('Starred',x,{v:orExpr()})):namedTest();
+      if(isKw('for')||isKw('async')){compFor();expectOp(')','to close the generator');return N('Other',x);}
+      if(isOp(')')){next();return Object.assign({},first,{paren:true});}
+      if(!isOp(','))missingSep(')',x);
+      const elts=[first];while(isOp(',')){next();if(isOp(')'))break;if(isOp(','))fail('extra comma: two commas in a row',T[p]);elts.push(isOp('*')?(next(),N('Starred',x,{v:orExpr()})):namedTest());if(!isOp(',')&&!isOp(')'))missingSep(')',x);}
+      expectOp(')');lintStrings(elts,'tuple');return N('Tuple',x,{elts});}
+    if(isOp('[')){next();const r=seq(']','list',x);if(!r.comp)lintStrings(r.elts,'list');return N(r.comp?'Other':'List',x,{elts:r.elts});}
+    if(isOp('{')){next();return braces(x);}
+    if(x.t==='kw')fail('invalid syntax: "'+x.v+'" can\u2019t be used here',x,x.v==='else'||x.v==='elif'?'Check the indentation and the ":" on the line above.':'');
+    if(x.t==='newline'||x.t==='eof')fail('unexpected end of line \u2014 something is missing',x);
+    if(x.t==='indent')fail('unexpected indent',x,'This line is indented more than the lines around it.');
+    fail('invalid syntax: unexpected '+desc(x),x,x.t==='op'&&x.v===','?'There is a "," with nothing before it.':'');
+  }
+  function braces(open){
+    if(isOp('}')){next();return N('Dict',open,{keys:[],vals:[]});}
+    const keys=[],vals=[],elts=[];let isDict=null,first=true;
+    while(!isOp('}')){
+      if(isOp(','))fail(first?'extra comma: "," right after "{"':'extra comma: two commas in a row',T[p],'Remove the extra ",".');
+      if(isOp('**')){next();orExpr();keys.push(null);vals.push(null);isDict=true;}
+      else{
+        const kx=T[p];const k=isOp('*')?(next(),N('Starred',kx,{v:orExpr()})):namedTest();
+        if(isDict===null)isDict=isOp(':');
+        if(isDict){
+          if(!isOp(':'))fail('expected ":" after the dictionary key but found '+desc(T[p]),T[p],'Each item in a dict is written key: value.');
+          next();const v=test();
+          if(isOp(':')&&v&&v.k==='Const'&&v.parts>1)fail('missing comma? Two strings are joined here, so the next ":" makes no sense',T[p],'Python joined the value and the next key into '+JSON.stringify(v.v)+'. Add a "," after the value on line '+v.line+'.');
+          if(first&&(isKw('for')||isKw('async'))){compFor();expectOp('}');return N('Other',open);}
+          keys.push(k);vals.push(v);
+        }else{
+          if(isOp(':'))fail('unexpected ":" in a set',T[p]);
+          if(first&&(isKw('for')||isKw('async'))){compFor();expectOp('}');return N('Other',open);}
+          elts.push(k);
+        }
+      }
+      first=false;
+      if(isOp(','))next();
+      else if(!isOp('}')){
+        const y=T[p];
+        if(isDict&&startsExpr(y))fail('missing comma? Expected "," or "}" but found '+desc(y),y,'Two dictionary items are next to each other with no "," between them.');
+        missingSep('}',open);
+      }
+    }
+    next();
+    if(isDict){
+      const seen=new Map();
+      keys.forEach((k,i)=>{if(k&&k.k==='Const'&&typeof k.v==='string'){if(seen.has(k.v))res.warnings.push({line:k.line,msg:'Key '+JSON.stringify(k.v)+' appears twice in the same dict.',hint:'Only the last value is kept; the earlier one (line '+seen.get(k.v)+') is silently dropped.'});else seen.set(k.v,k.line);}});
+      return N('Dict',open,{keys,vals});
+    }
+    lintStrings(elts,'set');return N('Set',open,{elts});
+  }
+  function lintStrings(elts,where){
+    elts.forEach(e=>{if(e&&e.k==='Const'&&e.parts>1&&!e.paren)res.warnings.push({line:e.line,msg:'Two strings next to each other in a '+where+' are joined into one: '+JSON.stringify(e.v.length>80?e.v.slice(0,77)+'...':e.v)+'.',hint:'Python joins "a" "b" into "ab". If they were meant to be separate items, a comma is missing'+(e.lines.length>1?' at the end of line '+e.lines[0]:'')+'.',kind:'implicit-concat'});});
+  }
+  try{res.body=file();}
+  catch(e){if(e instanceof PySyntaxError){res.ok=false;res.error=e;}else throw e;}
+  return res;
+}
+
+/* ---------- reading values out of the tree ---------- */
+function pyLit(n){
+  if(!n)return undefined;
+  switch(n.k){
+    case 'Const':return n.v;
+    case 'List':case 'Tuple':case 'Set':{const a=n.elts.map(pyLit);return a.some(x=>x===undefined)?undefined:a;}
+    case 'Dict':{const o={};for(let i=0;i<n.keys.length;i++){if(!n.keys[i])return undefined;const k=pyLit(n.keys[i]),v=pyLit(n.vals[i]);if(k===undefined||v===undefined)return undefined;o[k]=v;}return o;}
+    case 'Unary':{const v=pyLit(n.v);return typeof v==='number'?(n.op==='-'?-v:v):undefined;}
+    default:return undefined;
+  }
+}
+function pyTopAssigns(body){const m=new Map();body.forEach(s=>{if(s.k==='Assign')s.targets.forEach(t=>{if(t.k==='Name')m.set(t.id,s.value);});});return m;}
+
+
+/* ================= Executor model (raya*.py + refresh / output / debug) ================= */
+function pyStrip(src){
+  let out='',i=0;const n=src.length;
+  while(i<n){
+    const c=src[i];
+    if(c==='#'){while(i<n&&src[i]!=='\n')i++;continue;}
+    if(c==="'"||c==='"'){
+      const tri=src.substr(i,3)===c+c+c,q=tri?c+c+c:c;let j=i+q.length;
+      while(j<n){if(src[j]==='\\'){j+=2;continue;}if(src.substr(j,q.length)===q)break;if(!tri&&src[j]==='\n')break;j++;}
+      j=Math.min(n,j+q.length);out+=src.slice(i,j);i=j;continue;
+    }
+    out+=c;i++;
+  }
+  return out;
+}
+const PYSTR=/[rRuUbB]?("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')/g;
+const unq=s=>s.replace(/^("""|'''|"|')/,'').replace(/("""|'''|"|')$/,'');
+function pyAssigns(src){
+  const t=pyStrip(src),out=[];
+  const ls=[0];for(let i=0;i<t.length;i++)if(t[i]==='\n')ls.push(i+1);
+  const lineOf=p=>{let k=0;while(k+1<ls.length&&ls[k+1]<=p)k++;return k+1;};
+  for(const m of t.matchAll(/^[ \t]*([A-Za-z_][\w.]*)\s*(?::[^=\n]+)?(\+?=)\s*(?=\S)/gm)){
+    const st=m.index+m[0].length;let body;
+    if(/[\[\({]/.test(t[st])){
+      let d=0,j=st,q=null;
+      for(;j<t.length;j++){const ch=t[j];
+        if(q){if(ch==='\\'){j++;continue;}if(t.substr(j,q.length)===q){j+=q.length-1;q=null;}continue;}
+        if(ch==='"'||ch==="'"){q=t.substr(j,3)===ch+ch+ch?ch+ch+ch:ch;j+=q.length-1;continue;}
+        if('[({'.includes(ch))d++;else if('])}'.includes(ch)){d--;if(d===0)break;}}
+      body=t.slice(st,j+1);
+    }else{const nl=t.indexOf('\n',st);body=t.slice(st,nl<0?t.length:nl);const tq=body.match(/^[rRuU]?("""|''')/);if(tq){const e=t.indexOf(tq[1],st+tq[0].length);body=t.slice(st,e<0?t.length:e+3);}}
+    const strs=[...body.matchAll(PYSTR)].map(x=>unq(x[1]));
+    const pairs=[...body.matchAll(/[rRuU]?("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')\s*:\s*[rRuU]?("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')/g)].map(x=>[unq(x[1]),unq(x[2])]);
+    let items=strs;
+    if(strs.length===1&&/[\s,]/.test(strs[0].trim())&&!/[\[\({]/.test(body.trim()[0]))items=strs[0].split(/[\s,;]+/);
+    items=items.map(x=>x.trim()).filter(Boolean);
+    out.push({name:m[1],op:m[2],line:lineOf(m.index),items,pairs,isList:/^[\[\({]/.test(body.trim())||items.length>1});
+  }
+  return out;
+}
+const TABLEISH=/^[A-Za-z_][\w$]*(\.[A-Za-z_][\w$]*){0,2}$/;
+function nameKeys(e){
+  let x=String(e).trim().toLowerCase().replace(/\.(sql|hql)$/,'');const keys=new Set([x]);
+  const last=x.split('.').pop();keys.add(last);
+  let y=last.replace(/^\d{6,}_/,'');keys.add(y);
+  const tk=y.split('_');if(tk.length>1&&ENGINES.has(tk[0]))keys.add(tk.slice(1).join('_'));
+  return keys;
+}
+// output.py rows like {"T":"rel_af_fact_application","C":"month_decision_partition"}, # full load
+function pyDictRows(raw){
+  const t=pyStrip(raw),rows=[],TK=['t','table','table_name','tbl','name'],CK=['c','col','column','partition','partition_col','partition_column','part'];
+  for(const m of t.matchAll(/\{([^{}]*)\}/g)){
+    const o={};for(const p of m[1].matchAll(/["']([^"']+)["']\s*:\s*["']([^"']*)["']/g))o[p[1].trim().toLowerCase()]=p[2].trim();
+    const tk=TK.find(k=>o[k]!=null);if(!tk||!TABLEISH.test(o[tk]))continue;
+    const ck=CK.find(k=>o[k]!=null);rows.push({table:o[tk],part:ck?o[ck]:'',note:''});
+  }
+  if(rows.length){const lines=raw.split(/\r?\n/);
+    rows.forEach(r=>{const ln=lines.find(l=>!/^\s*#/.test(l)&&(l.includes('"'+r.table+'"')||l.includes("'"+r.table+"'")));
+      if(ln){const after=ln.slice(ln.lastIndexOf('}')+1),i=after.indexOf('#');if(i>=0)r.note=after.slice(i+1).trim().slice(0,80);}});}
+  return rows;
+}
+function computeExec(){
+  const st=notes.exec||(notes.exec={});
+  const byKey=k=>S.pys.find(p=>p.key===k);
+  const pick=(k,re)=>st[k]!=null?(st[k]===''?null:byKey(st[k])):(S.pys.find(p=>re.test(p.name.split('/').pop()))||null);
+  const E={st};
+  E.executor=pick('executor',/^raya.*\.py$/i);
+  E.refresh=pick('refresh',/^refresh.*\.py$/i);
+  E.output=pick('output',/^output.*\.py$/i);
+  E.debug=pick('debug',/^debug.*\.py$/i);
+  // mode
+  E.mode='';E.modeFile=null;
+  for(const f of [E.executor,E.debug,...S.pys]){if(!f)continue;const m=[...pyStrip(f.raw).matchAll(/^\s*mode\s*=\s*['"](\w+)['"]/gim)][0];if(m){E.mode=m[1].toLowerCase();E.modeFile=f;break;}}
+  // lists
+  const listsOf=f=>f?pyAssigns(f.raw).filter(a=>a.items.length&&a.name.toLowerCase()!=='mode'):[];
+  const refA=listsOf(E.refresh);
+  E.refreshItems=[...new Set(refA.flatMap(a=>a.items).filter(x=>TABLEISH.test(x)))];
+  const outA=listsOf(E.output);E.outMap=new Map();E.outNote=new Map();
+  const orows=E.output?pyDictRows(E.output.raw):[];
+  if(orows.length)orows.forEach(r=>{E.outMap.set(r.table,r.part);if(r.note)E.outNote.set(r.table,r.note);});
+  else outA.forEach(a=>{a.pairs.forEach(([k,v])=>{if(TABLEISH.test(k))E.outMap.set(k,v);});const pv=new Set(a.pairs.flat());a.items.forEach(x=>{if(!pv.has(x)&&TABLEISH.test(x)&&!E.outMap.has(x))E.outMap.set(x,'');});});
+  // debug.py: debug = {"exact_table": [...], "exclude_table": [...]}; standalone.py: standalone = {...}
+  E.standalone=pick('standalone',/^standalone.*\.py$/i);
+  const dictLists=(f,name)=>{const o={exact:[],exclude:[],ok:false};if(!f)return o;const r=pyParse(f.raw);if(!r.ok)return o;const v=pyLit(pyTopAssigns(r.body).get(name));
+    if(!v||typeof v!=='object'||Array.isArray(v))return o;const arr=x=>Array.isArray(x)?x.filter(y=>typeof y==='string'):[];o.exact=arr(v.exact_table);o.exclude=arr(v.exclude_table);o.ok=true;return o;};
+  const DL=dictLists(E.debug,'debug'),SL=dictLists(E.standalone,'standalone');
+  E.debugLists=[];E.inc=DL.exact;E.exc=DL.exclude;E.sinc=SL.exact;E.sexc=SL.exclude;E.debugOk=DL.ok;E.standaloneOk=SL.ok;
+  // match list entries to scripts
+  const idx=new Map();
+  S.scripts.forEach(s=>{[s.logical.toLowerCase(),s.name.replace(/\.[^.]+$/,'').toLowerCase(),...s.targets.map(t=>t.split('.').pop())].forEach(k=>{if(!idx.has(k))idx.set(k,new Set());idx.get(k).add(s);});});
+  const resolve=list=>{const hit=new Set(),miss=[];list.forEach(e=>{let found=false;for(const k of nameKeys(e)){if(idx.has(k)){idx.get(k).forEach(s=>hit.add(s));found=true;break;}}if(!found)miss.push(e);});return {hit,miss};};
+  const I=resolve(E.inc),X=resolve(E.exc),SI=resolve(E.sinc),SX=resolve(E.sexc);
+  const O=resolve([...E.outMap.keys()]);
+  E.incMiss=I.miss;E.excMiss=X.miss;E.outMiss=O.miss;
+  const partOf=s=>{for(const [k,v] of E.outMap){for(const kk of nameKeys(k)){if(idx.has(kk)&&idx.get(kk).has(s))return {table:k,part:v,note:E.outNote.get(k)||''};}}return null;};
+  // plan
+  E.rows=S.scripts.map(s=>{
+    const r={s,out:partOf(s)};
+    if(!s.executes){r.prod=r.dbg=false;r.why=s.ext!=='sql'?'.'+s.ext+' file \u2014 not picked up':'in a subfolder \u2014 not picked up';return r;}
+    r.prod=true;
+    if(!I.hit.has(s)){r.dbg=false;r.dwhy='not in exact_table';}else if(X.hit.has(s)){r.dbg=false;r.dwhy='in exclude_table';}else r.dbg=true;
+    if(!SI.hit.has(s)){r.sta=false;r.swhy='not in exact_table';}else if(SX.hit.has(s)){r.sta=false;r.swhy='in exclude_table';}else r.sta=true;
+    return r;
+  });
+  const rowOf=new Map(E.rows.map(r=>[r.s,r]));
+  E.rows.forEach(r=>{if(r.dbg)r.stale=[...r.s.up].filter(u=>!rowOf.get(u).dbg);if(r.sta)r.sstale=[...r.s.up].filter(u=>!rowOf.get(u).sta);});
+  // refresh check: source tables read by non-oracle scripts that are not refreshed
+  const rk=new Set();E.refreshItems.forEach(x=>{const l=x.toLowerCase();rk.add(l);});
+  E.notRefreshed=S.tables.filter(t=>t.kind==='source'&&t.c.some(s=>s.engine!=='oracle')&&!rk.has(t.name)&&!(t.name.includes('.')?false:[...rk].some(k=>k.split('.').pop()===t.name)));
+  E.refreshUnused=E.refreshItems.filter(x=>!S.tables.some(t=>t.name===x.toLowerCase()||t.name.split('.').pop()===x.toLowerCase().split('.').pop()));
+  E.outputs=E.rows.filter(r=>r.out&&r.prod);
+  E.debugRuns=E.rows.filter(r=>r.dbg);
+  E.sqlInTxt=E.rows.filter(r=>!r.s.executes);
+  // reads of af_mon.<table> whose table is not written out by output.py
+  const byL=new Map(S.scripts.map(s=>[(s.logical||'').toLowerCase(),s]));
+  E.monStale=[];
+  S.scripts.forEach(s=>(s.monRefs||[]).forEach(L=>{const p=byL.get(L);if(p&&!O.hit.has(p)&&!p.targets.includes('af_mon.'+L))E.monStale.push({s,L});}));
+  return E;
+}
+const pl=(n,w)=>n+' '+w+(n===1?'':'s');
+function execChecks(E,forExport){
+  const G=[];
+  if(!E.executor)G.push(['No executor found','No `raya*.py` file was found. Pick the executor under Config files.']);
+  if(E.outMiss.length)G.push(['`'+(E.output?E.output.name:'output.py')+'`: tables with no matching script','Nothing produces these, so nothing will be written for them: '+E.outMiss.map(bt).join(', ')]);
+  if(E.monStale.length)G.push(['Reads `af_mon.` tables that this pipeline does not write','These tables are not in '+(E.output?bt(E.output.name):'`output.py`')+', so the `af_mon.` copy is not refreshed by this run: '+E.monStale.map(x=>bt(x.s.logical)+' reads `af_mon.'+x.L+'`').join('; ')]);
+  if(E.notRefreshed.length)G.push(['Source tables read on Impala but not in the refresh list','Impala may read stale metadata for: '+E.notRefreshed.map(t=>bt(t.name)).join(', ')]);
+  if(E.refreshUnused.length)G.push(['Refreshed but not read by any script','Harmless, but possibly left over: '+E.refreshUnused.map(bt).join(', ')]);
+  if(E.sqlInTxt.length)G.push(['SQL that the executor will not run',E.sqlInTxt.map(r=>bt(r.s.name)+' ('+r.why+')').join(', ')]);
+  if(!forExport){
+    if(E.incMiss.length)G.push(['Debug include list: names with no matching script',E.incMiss.map(bt).join(', ')]);
+    if(E.excMiss.length)G.push(['Debug exclude list: names with no matching script',E.excMiss.map(bt).join(', ')]);
+    const stale=E.rows.filter(r=>r.dbg&&r.stale&&r.stale.length);
+    if(stale.length)G.push(['Debug run reads tables it does not rebuild','These read the last built version of a skipped step: '+stale.map(r=>bt(r.s.logical)+' ← '+r.stale.map(u=>bt(u.logical)).join(', ')).join('; ')]);
+  }
+  return G;
+}
+function famMarkdown(L){
+  if(!S.families.length)return;
+  L.push('','### Incremental tables (daily / backup / union)','');
+  L.push('Some large tables are not rebuilt from scratch each run. Rebuilding only the latest days and adding them to the existing table is much faster. Each such table has three helper scripts that run just before it:','');
+  L.push('1. **`_daily`** takes only the recent partitions (`part_date >= sysdate - 3`).');
+  L.push('2. **`_backup`** takes the whole table as it was after the last run (`af_mon.<table_name>`).');
+  L.push('3. **`_union`** combines the two: backup + daily.');
+  L.push('4. **The final table** is `select * from` the union, and is written out as `af_mon.<table_name>` for the next run.');
+  L.push('','The helpers are only there for speed. Read the final table, not the helpers.','');
+  L.push('| Final table | Daily | Backup | Union | Daily window |','|---|---|---|---|---|');
+  S.families.forEach(f=>L.push('| '+bt(f.final.logical)+' | '+['daily','backup','union'].map(r=>f[r]?bt(f[r].logical):'_missing_').join(' | ')+' | '+(f.lookback!=null?f.lookback+' days':'not detected')+' |'));
+}
+function execMarkdown(E,L,withRunOrder){
+  const ex=E.executor?bt(E.executor.name):'`raya*.py`',rf=E.refresh?bt(E.refresh.name):'`refresh.py`',op=E.output?bt(E.output.name):'`output.py`',db=E.debug?bt(E.debug.name):'`debug.py`';
+  const sample=S.scripts.find(s=>s.executes&&s.order&&s.engine)||S.scripts[0];
+  const other=E.executor&&/^raya\.py$/i.test(E.executor.name)?'`raya_<something>.py`':'just `raya.py`';
+  L.push('### How the pipeline runs','','The entry point is '+ex+' (in some folders it is called '+other+'; they work the same way). One run does the following:','');
+  L.push('1. **Collect the scripts.** It takes every `.sql` file directly in the folder and runs them sorted by the full file name, so the number at the start decides the order, e.g. `202502271441_…` runs before `202502271443_…`. Files in subfolders and `.txt` files are not run.');
+  L.push('2. **Refresh source tables.** Before running anything, it refreshes every table listed in '+rf+' ('+pl(E.refreshItems.length,'table')+'), so Impala sees the latest data.');
+  L.push('3. **Pick the scripts for this run.** The variable `mode` in the executor decides:');
+  L.push('   - `production`: every script runs.');
+  L.push('   - `debug`: only the tables in `exact_table` in '+db+' run, minus any in `exclude_table`. These lists change with whatever is being debugged, so they are not listed here.');
+  L.push('   - `standalone`: the same, using '+(E.standalone?bt(E.standalone.name):'`standalone.py`')+'. The executor uses this for the Suspicious tables, which run separately after the main run.');
+  L.push('   - Any other value runs every script, so a typo in `mode` runs everything.');
+  L.push('4. **Run each script in order.** First every `sql_var` text replacement in the executor is applied to the script. `impala` scripts then run through Spark SQL (`spark.sql`), and anything else is sent to Oracle as `(your query)`. If the table is **not** in '+op+', the result becomes a temporary view named after the file, which later scripts in the same session can read by that name.');
+  L.push('   - If a script fails, the error is written to `run_log.txt` and the run carries on. Scripts that depend on it then fail too, so check the log after every run.');
+  L.push('5. **Write the outputs.** Tables listed in '+op+' ('+pl(E.outMap.size,'table')+') are written straight to `af_mon.<table_name>`, partitioned by their `C` column, instead of becoming a view. Later scripts must read them as `af_mon.<table_name>`. While the text `run_after_6pm` is still in the query (before 6 pm), the output is skipped.');
+  L.push('','### File naming','','Each script is named `<order>_<source>_<table_name>.sql`:','');
+  L.push('- **order:** a number, usually a date or timestamp. Files are sorted by the whole name, so watch out when the numbers have different lengths: `202501011200_…` runs **before** `20250101_…`, because digits sort before `_`.');
+  L.push('- **source:** the engine the SQL runs on: '+(S.engines.length?S.engines.map(bt).join(', '):'`impala`, `oracle`')+'.');
+  L.push('- **table_name:** the name of the result table. It is the name used in '+op+' and '+db+', and after output it becomes `af_mon.<table_name>`.');
+  if(sample)L.push('','Example: '+bt(sample.name)+' runs on **'+(sample.engine||'?')+'** and produces '+bt(sample.logical)+'.');
+  L.push('','### Table types','');
+  L.push('- **Output tables** are the `fact` and `agg` tables. These are what reports and users read.');
+  L.push('- **Transformation tables** are everything else the pipeline builds. They only exist to feed the output tables.');
+  famMarkdown(L);
+  L.push('','### Config files','','| File | Role | What it holds |','|---|---|---|');
+  L.push('| '+ex+' | Executor | Runs the steps above and holds the `mode` switch |');
+  L.push('| '+rf+' | Refresh list | '+pl(E.refreshItems.length,'table')+' refreshed before the run |');
+  L.push('| '+op+' | Output list | '+pl(E.outMap.size,'table')+' written to Impala/Hive with partitions |');
+  L.push('| '+db+' | Debug lists | `debug = {"exact_table": [...], "exclude_table": [...]}`, used when `mode = \'debug\'` (changes often) |');
+  L.push('| '+(E.standalone?bt(E.standalone.name):'`standalone.py`')+' | Standalone lists | `standalone = {...}` in the same shape, used when `mode = \'standalone\'` |');
+  if(withRunOrder!==false){
+    L.push('','### Run order (production)','','| # | Script file | Engine | Result table | Type | Written to Hive (partition) | Depends on |','|---|---|---|---|---|---|---|');
+    let n=0;
+    E.rows.forEach(r=>{const s=r.s,t=S.tables.find(x=>x.name===s.targets[0]);
+      const dep=[...s.up].map(u=>bt(u.logical));if(s.prevRun)dep.push('previous run of '+bt(s.prevRun));
+      L.push('| '+(r.prod?++n:'—')+' | '+bt(s.name)+' | '+(s.engine||'')+' | '+cell(s.targets.map(bt).join(', '))+' | '+(s.famRole&&s.famRole!=='final'?s.famRole+' helper':t?t.kind:'')+' | '+(r.out?'Yes'+(r.out.part||r.out.note?' ('+[r.out.part?'`'+r.out.part+'`':'',r.out.note].filter(Boolean).join(', ')+')':''):'')+(r.prod?'':' Not run: '+r.why)+' | '+cell(dep.join(', '))+' |');});
+    const ck=execChecks(E,true);
+    if(ck.length){L.push('','### Config checks','');ck.forEach(c=>L.push('- **'+c[0]+'.** '+c[1]));}
+  }
+  if(withRunOrder!==false&&(E.st.notes||'').trim())L.push('','### Notes','',E.st.notes.trim());
+  L.push('');
+}
+
+/* ================= Theme (Ghibli misty hills) ================= */
+const THEMES={
+  earth:{sky:['#EBC9A0','#F7E9D4'],ridges:['#E2B88E','#CF946A','#B0704C','#7E4A33'],sun:'#C8452C',acc:'#B0532A',acc2:'#C99230'},
+  forest:{sky:['#C9DFCB','#EFF4E7'],ridges:['#AECBA8','#84AC82','#5C8C61','#3B6948'],sun:'#FFFDF4',acc:'#3B7A4D',acc2:'#C6613A'},
+  sea:{sky:['#B8DCE8','#EDF6F4'],ridges:['#A3CEDC','#74B2C8','#4690B0','#256A8C'],sun:'#FFFFFF',acc:'#1D7898',acc2:'#E0784E'},
+  wind:{sky:['#CFDBF0','#F4F2F8'],ridges:['#C3CEE6','#A6B4D7','#8894C2','#6772A6'],sun:'#FFFFFF',acc:'#4569B3',acc2:'#D9A32E'}
+};
+const PHASES={dawn:{sky:['#EDB9AC','#FAE3CF'],tint:'#F2B3A0',k:.22},dusk:{sky:['#D98A7E','#F4C9A6'],tint:'#6A3E62',k:.42},night:{sky:['#16203D','#34406A'],tint:'#111933',k:.66}};
+const TKEY='sqldoc.theme';
+function phaseNow(d){const h=(d||new Date()).getHours();return h>=5&&h<8?'dawn':h>=16&&h<19?'dusk':(h>=19||h<5)?'night':'day';}
+function mix(a,b,k){const p=x=>[1,3,5].map(i=>parseInt(x.slice(i,i+2),16));const A=p(a),B=p(b);return '#'+A.map((v,i)=>Math.round(v+(B[i]-v)*k).toString(16).padStart(2,'0')).join('');}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function ridge(yBase,amp,seed,freq,W,H){W=W||800;H=H||440;const r=rng(seed),p=[r()*6,r()*6];let d='M0 '+H+' L';
+  for(let x=0;x<=W;x+=5){const y=yBase-amp*(0.7*Math.sin(x*freq+p[0])+0.3*Math.sin(x*freq*2.1+p[1]));d+=x+' '+y.toFixed(1)+' L';}
+  return d+W+' '+H+'Z';}
+function sceneSvg(name,phase,kind){
+  const T=THEMES[name],P=PHASES[phase];const sky=P?P.sky:T.sky;
+  const rc=T.ridges.map(c=>P?mix(c,P.tint,P.k):c);
+  const band=kind==='band',W=band?1600:800,H=band?100:250;
+  const R=band?[[46,9,.006,11],[60,8,.008,23],[74,7,.011,37],[88,6,.014,51]]:[[128,18,.0085,11],[156,15,.011,23],[184,12,.014,37],[212,10,.018,51]];
+  const sx=band?1380:610,sy=band?(phase==='day'?28:40):(phase==='day'?62:84),sr=band?13:24;
+  let s='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMax slice"><defs><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+sky[0]+'"/><stop offset="1" stop-color="'+sky[1]+'"/></linearGradient><linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".7" stop-color="#fff" stop-opacity="'+(phase==='night'?'.07':'.3')+'"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="'+W+'" height="'+H+'" fill="url(#k)"/>';
+  if(phase==='night'){const r=rng(7);for(let i=0;i<(band?50:36);i++)s+='<circle cx="'+(r()*W).toFixed(0)+'" cy="'+(r()*H*.45).toFixed(0)+'" r="'+(r()*1.1+.4).toFixed(1)+'" fill="#fff" opacity="'+(r()*.5+.4).toFixed(2)+'"/>';
+    s+='<circle cx="'+sx+'" cy="'+sy+'" r="'+sr+'" fill="#F4EFD8"/><circle cx="'+(sx+sr*.45)+'" cy="'+(sy-sr*.3)+'" r="'+(sr*.92)+'" fill="'+mix(sky[0],sky[1],(sy-sr*.3)/H)+'"/>';}
+  else{s+='<circle cx="'+sx+'" cy="'+sy+'" r="'+sr+'" fill="'+T.sun+'" opacity="'+(name==='earth'?1:.92)+'"/>';
+    if(!band)s+='<g fill="none" stroke="'+mix(rc[3],'#000000',.2)+'" stroke-width="1.6" stroke-linecap="round" opacity=".5"><path d="M470 70 q5 -5 10 0 q5 -5 10 0"/><path d="M500 58 q4 -4 8 0 q4 -4 8 0"/><path d="M520 76 q3 -3 6 0 q3 -3 6 0"/></g>';}
+  R.forEach((q,i)=>{s+='<path d="'+ridge(q[0],q[1],q[3],q[2],W,H)+'" fill="'+rc[i]+'"/>';if(i<3)s+='<rect x="0" y="'+(q[0]-q[1]*1.2)+'" width="'+W+'" height="'+(q[1]*2.4)+'" fill="url(#m)"/>';});
+  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s+'</svg>');
+}
+let themeName='earth',themePhase='day';
+function themePref(){try{return localStorage.getItem(TKEY)||'random';}catch(e){return 'random';}}
+function applyTheme(pref){
+  pref=pref||themePref();const names=Object.keys(THEMES);
+  themeName=names.includes(pref)?pref:names[Math.floor(Math.random()*names.length)];themePhase=phaseNow();
+  const T=THEMES[themeName],dark=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches;
+  const acc=dark?mix(T.acc,'#FFFFFF',.35):T.acc,rs=document.documentElement.style;
+  rs.setProperty('--accent',acc);rs.setProperty('--accent-soft',dark?mix(T.acc,'#1d1d1b',.75):mix(T.acc,'#FFFFFF',.88));rs.setProperty('--accent2',T.acc2);
+  const hs=sceneSvg(themeName,themePhase,'hero'),bs=sceneSvg(themeName,themePhase,'band');
+  document.querySelectorAll('img.scene').forEach(i=>i.src=i.closest('.band')?bs:hs);
+  document.body.classList.toggle('sky-dark',themePhase==='dusk'||themePhase==='night');
+  document.querySelectorAll('.themeSel').forEach(sel=>{sel.innerHTML=['random',...names].map(n=>'<option value="'+n+'"'+(n===pref?' selected':'')+'>'+(n==='random'?'Random each visit ('+themeName+')':cap(n))+'</option>').join('');});
+}
+
+/* ================= App state & UI ================= */
+let S=null,project='project',notes=emptyNotes(),saveT=null,showSrc=false,groupFam=true,zoom=1,graphLinks=[];
+function emptyNotes(){return {overview:{},scripts:{},tables:{},layers:{},files:{},columns:{},exec:{},export:{}};}
+function loadNotes(){notes=emptyNotes();try{const v=localStorage.getItem('ddb:'+project);if(v){const o=JSON.parse(v);Object.keys(notes).forEach(k=>{if(o[k])notes[k]=o[k];});}}catch(e){}}
+function saveNotes(){if(READONLY)return;clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem('ddb:'+project,JSON.stringify(notes));}catch(e){}},300);}
+const today=()=>new Date().toISOString().slice(0,10);
+const defaultTitle=()=>project+' \u2014 Datamart documentation';
+const noteScript=s=>(notes.scripts[s.key]!=null?notes.scripts[s.key]:s.desc||'').trim();
+const noteFile=f=>(notes.files[f.key]!=null?notes.files[f.key]:f.desc||'').trim();
+
+function buildMarkdown(withGraph,forHtml){
+  const L=[],o=notes.overview,c=S.counts;
+  L.push('# '+(o.title||defaultTitle()),'');
+  L.push('_Generated '+today()+' from '+S.scripts.length+' SQL scripts in '+bt(project)+'. Tables and dependencies are parsed from the SQL; descriptions are written by the team._','');
+  let sn=0;const H2=t=>'## '+(++sn)+'. '+t;
+  L.push(H2('Overview'),'');
+  OV_FIELDS.forEach(f=>L.push('### '+f[1],'',(o[f[0]]||'').trim()||'_To be filled in._',''));
+  L.push('### At a glance','');
+  L.push('- **SQL scripts:** '+S.scripts.length+(S.engines.length?' ('+S.engines.join(', ')+')':''));
+  L.push('- **Tables:** '+S.tables.length+' \u2014 '+c.source+' source, '+c.transformation+' transformation, '+c.output+' output (fact/agg)');
+  L.push('- **Pipeline depth:** '+(S.maxDepth+1)+' dependency steps');
+  if(S.pys.length)L.push('- **Python tools:** '+S.pys.map(p=>bt(p.name)).join(', '));
+  L.push('',H2('How it runs'),'');execMarkdown(computeExec(),L);
+  L.push(H2('Data flow'),'');
+  if(withGraph)L.push('[[GRAPH]]','');
+  L.push('### Layers','','| Layer | Scripts | What it does |','|---|---|---|');
+  S.layers.forEach(l=>L.push('| '+cap(l.name)+' | '+l.scripts.length+' | '+cell(notes.layers[l.name]||'')+' |'));
+  const tl=arr=>arr.length?arr.map(t=>'- '+bt(t.name)+(notes.tables[t.name]?' \u2014 '+notes.tables[t.name].replace(/\n/g,' '):'')):['_None detected._'];
+  L.push('','### Source tables','','Read by the pipeline but not written by it.','',...tl(S.tables.filter(t=>t.kind==='source')));
+  L.push('','### Output tables','','The fact and agg tables. Everything else the pipeline builds is a transformation table that only feeds them.','',...tl(S.tables.filter(t=>t.kind==='output')));
+  L.push('',H2('Scripts by layer'),'');
+  S.layers.forEach(l=>{
+    L.push('### '+cap(l.name),'');
+    if(notes.layers[l.name])L.push(notes.layers[l.name].trim(),'');
+    l.scripts.forEach(s=>{
+      L.push('#### '+bt(s.name),'');
+      const d=noteScript(s);if(d)L.push(d,'');
+      L.push('- **Writes:** '+(s.targets.map(bt).join(', ')||'_none detected_')+(s.implicit?' _(SELECT result, named after the file)_':''));
+      if(!s.executes)L.push('- **Not run by the executor** (only top-level `.sql` files run)');
+      L.push('- **Reads:** '+(s.sources.map(bt).join(', ')||'_none detected_'));
+      if(s.up.size)L.push('- **Runs after:** '+[...s.up].map(u=>bt(u.name)).join(', '));
+      if(s.down.size)L.push('- **Feeds:** '+[...s.down].map(u=>bt(u.name)).join(', '));
+      if(s.vars.length)L.push('- **Parameters:** '+s.vars.map(bt).join(', '));
+      if(s.partitions.length)L.push('- **Partitions:** '+s.partitions.map(bt).join(', '));
+      L.push('');
+    });
+  });
+  L.push(H2('Table catalog'),'','| Table | Kind | Written by | Read by | Notes |','|---|---|---|---|---|');
+  S.tables.forEach(t=>L.push('| '+bt(t.name)+' | '+t.kind+' | '+cell(t.p.map(s=>bt(s.logical)).join(', '))+' | '+cell(t.c.map(s=>bt(s.logical)).join(', '))+' | '+cell(notes.tables[t.name]||'')+' |'));
+  L.push('',H2('Review items'),'');
+  if(!S.flags.groups.length)L.push('_Nothing flagged._','');
+  S.flags.groups.forEach(g=>{L.push('### '+g.title,'',g.why,'');g.items.forEach(i=>L.push('- '+i));L.push('');});
+  const gl=Object.entries(notes.columns||{}).filter(kv=>kv[1]&&kv[1].trim()).sort();
+  if(gl.length){
+    L.push(H2('Column glossary'),'','| Column | Meaning | How it is built | Lands in |','|---|---|---|---|');
+    gl.forEach(([c,v])=>{const e=S.colIndex[c],t=e?e.defs.find(x=>!x.d.pass):null,tabs=e?[...new Set(e.defs.filter(x=>x.d.ctx==='table').map(x=>x.d.into))]:[];
+      L.push('| '+bt(c)+' | '+cell(v)+' | '+(t?cell(bt(clip(t.d.expr,160))):'')+' | '+cell(tabs.map(bt).join(', '))+' |');});
+    L.push('');
+  }
+  if(S.pys.length||S.texts.length){
+    L.push(H2('Tools & config files'),'');
+    S.pys.forEach(p=>{L.push('#### '+bt(p.name),'');const d=noteFile(p);if(d)L.push(d,'');
+      if(p.defs.length)L.push('- **Functions:** '+p.defs.map(bt).join(', '));
+      if(p.refs.length)L.push('- **Files referenced:** '+p.refs.map(bt).join(', '));
+      if(p.tables.length)L.push('- **Tables mentioned:** '+p.tables.map(bt).join(', '));
+      L.push('');});
+    S.texts.forEach(t=>{L.push('#### '+bt(t.name),'',noteFile(t)||(t.lines+' lines.'),'');});
+  }
+  if(!forHtml){
+    const slug=slugger(),toc=['## Contents',''];slug('Contents');
+    L.forEach(l=>{const m=l.match(/^(#{2,3})\s+(.*)/);if(!m||m[2]==='Contents')return;const id=slug(mdInline(m[2]));toc.push((m[1].length===3?'  ':'')+'- ['+m[2].replace(/`/g,'')+'](#'+id+')');});
+    const at=L.findIndex(l=>l.startsWith('## '));if(at>0)L.splice(at,0,...toc,'');
+  }
+  return L.join('\n');
+}
+
+/* ================= Notes backup (export / import) ================= */
+const APP_ID='sql-doc-builder';
+function stamp(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'-'+z(d.getHours())+z(d.getMinutes());}
+function sanitizeNotes(n){
+  const out=emptyNotes();if(!n||typeof n!=='object')return out;
+  Object.keys(out).forEach(sec=>{const v=n[sec];if(!v||typeof v!=='object'||Array.isArray(v))return;
+    Object.keys(v).slice(0,20000).forEach(k=>{const x=v[k];if(typeof x==='string'&&k.length<=500)out[sec][k]=x.slice(0,20000);});});
+  return out;
+}
+const countNotes=n=>Object.values(n).reduce((a,o)=>a+Object.values(o).filter(x=>String(x).trim()).length,0);
+function storedNotes(proj){try{const v=localStorage.getItem('ddb:'+proj);return v?sanitizeNotes(JSON.parse(v)):emptyNotes();}catch(e){return emptyNotes();}}
+function exportNotes(){
+  if(!S){return;}
+  const payload={app:APP_ID,v:1,exported:new Date().toISOString(),data:{project,notes}};
+  download('sql-doc-notes-'+fileBase()+'-'+stamp()+'.json',JSON.stringify(payload,null,2),'application/json');
+}
+let pendingImport=null;
+function closeImport(){pendingImport=null;$('#imp').classList.add('hidden');}
+async function readImport(file){
+  let o;
+  try{o=JSON.parse(await file.text());}catch(e){return showImport({err:'This file is not valid JSON.'});}
+  let proj,raw;
+  if(o&&o.app===APP_ID&&o.data&&typeof o.data==='object'){proj=o.data.project;raw=o.data.notes;}
+  else if(o&&o.app&&o.app!==APP_ID)return showImport({err:'This backup is from a different app ('+String(o.app).slice(0,40)+').'});
+  else if(o&&o.notes&&typeof o.notes==='object'){proj=o.project;raw=o.notes;}
+  else return showImport({err:'This file is not a SQL Doc Builder notes backup.'});
+  proj=typeof proj==='string'&&proj.trim()?proj.trim().slice(0,200):(S?project:'');
+  const inc=sanitizeNotes(raw);
+  if(!proj)return showImport({err:'The backup does not say which project it belongs to. Load the folder first, then import.'});
+  showImport({proj,inc,exported:o.exported});
+}
+function showImport(x){
+  pendingImport=x.err?null:x;
+  let h='<h3>Import notes</h3>';
+  if(x.err)h+='<p>'+esc(x.err)+'</p><div class="row-end"><button data-imp="cancel">Close</button></div>';
+  else{
+    const target=S?project:x.proj,cur=S&&x.proj===project?notes:storedNotes(x.proj);
+    h+='<p>Backup for <code>'+esc(x.proj)+'</code>'+(x.exported?' from '+esc(String(x.exported).slice(0,16).replace('T',' ')):'')+' with <b>'+countNotes(x.inc)+'</b> notes. You currently have <b>'+countNotes(cur)+'</b> for this project.</p>';
+    if(S&&x.proj!==project)h+='<p class="warn-t">This backup is for a different project than the folder you have open (<code>'+esc(project)+'</code>). It will be saved under <code>'+esc(x.proj)+'</code> and used when you open that folder.</p>';
+    h+='<ul class="muted" style="font-size:13px;margin:6px 0 12px;padding-left:18px"><li><b>Merge</b> adds notes you don’t have yet and keeps the ones you already wrote.</li><li><b>Replace</b> swaps all your notes for this project with the backup.</li></ul>';
+    h+='<div class="row-end"><button data-imp="cancel">Cancel</button><button data-imp="merge">Merge</button><button class="primary" data-imp="replace">Replace</button></div>';
+    void target;
+  }
+  $('#impBody').innerHTML=h;$('#imp').classList.remove('hidden');
+}
+function applyImport(mode){
+  const x=pendingImport;if(!x)return closeImport();
+  const same=S&&x.proj===project;
+  const base=mode==='replace'?emptyNotes():(same?notes:storedNotes(x.proj));
+  const out=emptyNotes();
+  Object.keys(out).forEach(sec=>{out[sec]=Object.assign({},mode==='replace'?{}:base[sec]);
+    Object.keys(x.inc[sec]).forEach(k=>{if(mode==='replace'||!(out[sec][k]&&String(out[sec][k]).trim()))out[sec][k]=x.inc[sec][k];});});
+  if(same){notes=out;saveNotesNow();showApp();}
+  else{try{localStorage.setItem('ddb:'+x.proj,JSON.stringify(out));}catch(e){}}
+  closeImport();
+  flash(mode==='replace'?'Notes replaced.':'Notes merged.');
+}
+function flash(t){const b=$('#banner');b.textContent=t;b.classList.remove('hidden','err');clearTimeout(flash.t);flash.t=setTimeout(()=>{if(!storageBlocked)b.classList.add('hidden');else storageBanner();},2600);}
+let storageBlocked=false;
+function storageBanner(){const b=$('#banner');b.textContent='This browser is not letting the page save notes. Use Export notes before you close it.';b.classList.add('err');b.classList.remove('hidden');}
+function checkStorage(){try{localStorage.setItem('ddb:__t','1');localStorage.removeItem('ddb:__t');}catch(e){storageBlocked=true;storageBanner();}}
+function saveNotesNow(){if(READONLY)return;clearTimeout(saveT);try{localStorage.setItem('ddb:'+project,JSON.stringify(notes));}catch(e){}}
+
+/* ================= Read-only shared copy ================= */
+function roPass(root){
+  if(!READONLY||!root)return;
+  root.querySelectorAll('[data-nk]').forEach(el=>{
+    if(el.tagName==='SELECT'){el.disabled=true;return;}
+    const v=(el.value||'').trim(),prev=el.previousElementSibling,lb=prev&&prev.classList.contains('lbl')?prev:null,card=el.parentElement;
+    if(!v){el.remove();if(lb)lb.remove();if(card&&card.classList.contains('card')&&!card.children.length)card.remove();return;}
+    const d=document.createElement('div');d.className=el.dataset.k==='title'?'note-ro note-title':'note-ro';d.textContent=v;el.replaceWith(d);
+  });
+}
+function bootEmbedded(){
+  try{
+    project=String(EMB.project||'project');
+    const files=(Array.isArray(EMB.files)?EMB.files:[]).filter(f=>f&&typeof f.name==='string'&&typeof f.text==='string').map(f=>({name:f.name,path:String(f.path||f.name),key:String(f.key||f.name),text:f.text}));
+    S=analyze(files);S.files=files;ancCache.clear();notes=sanitizeNotes(EMB.notes);
+    document.title=(notes.overview.title||defaultTitle())+' (interactive)';document.body.classList.add('ro');
+    ['bkNotes','rsNotes','reload','expInt'].forEach(id=>{const b=$('#'+id);if(b)b.classList.add('hidden');});
+    $('.brand').insertAdjacentHTML('afterend','<span class="ro-badge" title="Shared '+esc(String(EMB.generated||'').slice(0,10))+'">read-only copy</span>');
+    showApp();
+  }catch(err){$('#landing').classList.add('hidden');$('#app').classList.remove('hidden');$('#main').innerHTML='<div class="card flag"><h3>This shared copy could not be opened</h3><pre>'+esc(String(err&&err.stack||err).slice(0,800))+'</pre></div>';}
+}
+function exportInteractive(){
+  if(!S||!S.files)return;
+  saveNotesNow();
+  const data={app:APP_ID,v:1,generated:new Date().toISOString(),project,notes,files:S.files.map(f=>({name:f.name,path:f.path,key:f.key,text:f.text}))};
+  const json=JSON.stringify(data).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+  const marker="<script>\n'use strict';";
+  const at=PAGE_SRC.indexOf(marker);if(at<0){flash('Could not build the shared copy.');return;}
+  let html=PAGE_SRC.slice(0,at)+'<script type="application/json" id="embedded">'+json+'</'+'script>\n'+PAGE_SRC.slice(at);
+  const title=esc((notes.overview.title||defaultTitle())+' (interactive)');
+  html=html.replace(/<title>[^<]*<\/title>/,'<title>'+title+'</title>');
+  download(fileBase()+'_interactive.html',html,'text/html');
+}
+
+/* ================= Static document: outline + search ================= */
+function slugger(){const used={};return t=>{let b=String(t).replace(/<[^>]+>/g,'').replace(/`/g,'').toLowerCase().replace(/&[a-z#0-9]+;/g,'').replace(/[^\w\u00C0-\uFFFF]+/g,'-').replace(/^-+|-+$/g,'')||'section';let s=b,i=1;while(used[s])s=b+'-'+(++i);used[s]=1;return s;};}
+const DOC_JS=`(function(){
+var main=document.querySelector('main.doc'),q=document.getElementById('dq'),out=document.getElementById('dres'),idx=[],cur=null;
+main.querySelectorAll('h1,h2,h3,h4,p,li,tr').forEach(function(el){
+  if(/^H[1-4]$/.test(el.tagName))cur=el;
+  if(el.tagName==='LI'&&el.querySelector('li'))return;
+  var t=(el.textContent||'').replace(/\\s+/g,' ').trim();if(t)idx.push({el:el,t:t,l:t.toLowerCase(),h:cur});
+});
+function esc(s){return s.replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function go(el){el.scrollIntoView({block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');var d=document.getElementById('tocd');if(d)d.classList.remove('open');}
+var tmr;q.addEventListener('input',function(){clearTimeout(tmr);tmr=setTimeout(run,120);});
+q.addEventListener('keydown',function(e){if(e.key==='Enter'){var a=out.querySelector('a');if(a)a.click();}if(e.key==='Escape'){q.value='';run();}});
+document.addEventListener('keydown',function(e){if(e.key==='/'&&document.activeElement!==q){e.preventDefault();q.focus();}});
+function run(){
+  var s=q.value.trim().toLowerCase();out.innerHTML='';if(s.length<2){out.hidden=true;return;}
+  var hits=idx.filter(function(x){return x.l.indexOf(s)>=0;}),n=hits.length;
+  out.hidden=false;out.insertAdjacentHTML('beforeend','<div class="dcount">'+n+' match'+(n===1?'':'es')+(n>80?' (showing 80)':'')+'</div>');
+  hits.slice(0,80).forEach(function(x){
+    var i=x.l.indexOf(s),a=Math.max(0,i-40),snip=(a?'\\u2026':'')+x.t.slice(a,i)+'\\u0001'+x.t.slice(i,i+s.length)+'\\u0002'+x.t.slice(i+s.length,i+s.length+60);
+    var el=document.createElement('a');el.href='#';el.className='dhit';
+    el.innerHTML='<span class="dsec">'+esc(x.h?x.h.textContent:'')+'</span>'+esc(snip).replace('\\u0001','<mark>').replace('\\u0002','</mark>');
+    el.onclick=function(e){e.preventDefault();go(x.el);};out.appendChild(el);
+  });
+}
+var links=[].slice.call(document.querySelectorAll('.toc-list a'));
+var hs=[].slice.call(main.querySelectorAll('h2[id],h3[id]')),ticking=false;
+function spy(){ticking=false;var cur=hs[0];for(var i=0;i<hs.length;i++){if(hs[i].getBoundingClientRect().top<140)cur=hs[i];else break;}
+  links.forEach(function(a){var on=cur&&a.getAttribute('href')==='#'+cur.id;a.classList.toggle('on',on);if(on&&window.innerWidth>=900){var t=document.getElementById('tocd'),r=a.getBoundingClientRect(),tr=t.getBoundingClientRect();if(r.top<tr.top+80||r.bottom>tr.bottom-20)t.scrollTop+=r.top-tr.top-tr.height/2;}});}
+window.addEventListener('scroll',function(){if(!ticking){ticking=true;requestAnimationFrame(spy);}},{passive:true});spy();
+links.forEach(function(a){a.addEventListener('click',function(){document.getElementById('tocd').classList.remove('open');});});
+document.getElementById('toct').addEventListener('click',function(){document.getElementById('tocd').classList.toggle('open');});
+})();`;
+const DOC_CSS=`
+.dwrap{display:grid;grid-template-columns:270px minmax(0,1fr);gap:0;max-width:1300px;margin:0 auto}
+.toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:20px 14px 30px;border-right:1px solid var(--line);font-size:13px}
+.toc-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.toc-h b{font-size:13px}#toct{display:none}
+.toc-list{list-style:none;padding:0;margin:0}.toc-list ul{list-style:none;padding-left:12px;margin:2px 0 6px}
+.toc-list a{display:block;padding:3px 8px;border-radius:6px;color:var(--ink)}.toc-list a:hover{background:var(--soft);text-decoration:none}
+.toc-list a.on{background:var(--accent-soft);color:var(--accent)}
+.toc-list>li>a{font-weight:600}
+#dq{width:100%;margin-bottom:8px}
+#dres{margin:0 0 14px;max-height:50vh;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.dcount{font-size:12px;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+.dhit{display:block;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--ink);font-size:12.5px;word-break:break-word}
+.dhit:hover{background:var(--soft);text-decoration:none}.dsec{display:block;font-size:11px;color:var(--muted)}
+main.doc h2,main.doc h3,main.doc h4{scroll-margin-top:12px}
+.flash{animation:fl 1.6s ease}
+@keyframes fl{0%,40%{background:#ffe58a}100%{background:transparent}}
+@media (max-width:900px){.dwrap{display:block}.toc{position:sticky;top:0;z-index:5;max-height:none;border-right:0;border-bottom:1px solid var(--line);background:var(--bg);padding:10px 16px}
+ .toc-h b{display:none}#toct{display:inline-block;margin-left:auto}.toc-h{order:2;margin:8px 0 0}.toc{display:flex;flex-direction:column}.toc-list{display:none;max-height:60vh;overflow:auto;order:3}.toc.open .toc-list{display:block}#dq{order:1;margin:0}#dres{order:2;margin-top:8px}}
+@media print{.toc{display:none}.dwrap{display:block}}`;
+/* ================= Pick what goes into the .html export ================= */
+function splitMd(md){
+  const out={pre:[],secs:[]};let sec=null,sub=null;
+  md.split('\n').forEach(l=>{
+    let m;
+    if((m=l.match(/^## (?:\d+\. )?(.*)$/))){sec={title:m[1],key:m[1],intro:[],subs:[]};sub=null;out.secs.push(sec);return;}
+    if(sec&&(m=l.match(/^### (.*)$/))){sub={title:m[1],key:sec.key+' > '+m[1],lines:[l]};sec.subs.push(sub);return;}
+    (sub?sub.lines:sec?sec.intro:out.pre).push(l);
+  });
+  return out;
+}
+const selOn=k=>!(notes.export&&notes.export[k]==='0');
+function filterMd(md){
+  const t=splitMd(md),L=[...t.pre];let n=0;
+  t.secs.forEach(s=>{if(!selOn(s.key))return;const subs=s.subs.filter(x=>selOn(x.key));
+    L.push('## '+(++n)+'. '+s.title,...s.intro);subs.forEach(x=>L.push(...x.lines));});
+  return L.join('\n');
+}
+function showPicker(){
+  const t=splitMd(buildMarkdown(true,true));
+  const plain=s=>s.replace(/`/g,'');
+  let h='<h3>Choose what goes into the .html</h3><p class="muted" style="margin:0 0 8px;font-size:13px">Untick anything you don’t want. Your choice is remembered for this project.</p><div class="pick-tools"><button data-pk="all">Tick all</button><button data-pk="none">Untick all</button></div><div class="pick">';
+  t.secs.forEach((s,i)=>{
+    h+='<div class="pick-sec"><label class="pick-h"><input type="checkbox" data-key="'+esc(s.key)+'" data-sec="'+i+'"'+(selOn(s.key)?' checked':'')+'> '+esc(plain(s.title))+'</label>';
+    if(s.subs.length)h+='<div class="pick-subs">'+s.subs.map(x=>'<label><input type="checkbox" data-key="'+esc(x.key)+'" data-parent="'+i+'"'+(selOn(x.key)?' checked':'')+(selOn(s.key)?'':' disabled')+'> '+esc(plain(x.title))+'</label>').join('')+'</div>';
+    h+='</div>';
+  });
+  h+='</div><div class="row-end" style="margin-top:12px"><span class="muted" id="pickn" style="margin-right:auto;font-size:12.5px"></span><button data-pk="cancel">Cancel</button><button class="primary" data-pk="go">Export .html</button></div>';
+  $('#impBody').innerHTML=h;$('#impBody').classList.add('wide');$('#imp').classList.remove('hidden');pickCount();
+}
+function pickCount(){const all=$('#impBody').querySelectorAll('input[data-sec]'),on=[...all].filter(x=>x.checked).length;$('#pickn').textContent=on+' of '+all.length+' sections';$('#impBody').querySelector('[data-pk=go]').disabled=!on;}
+function pickSave(){
+  const ex={};$('#impBody').querySelectorAll('input[data-key]').forEach(x=>{if(!x.checked)ex[x.dataset.key]='0';});
+  notes.export=ex;saveNotesNow();
+}
+function pickClick(e){
+  const b=e.target.closest('[data-pk]');
+  if(b){const k=b.dataset.pk;
+    if(k==='all'||k==='none'){$('#impBody').querySelectorAll('input[data-key]').forEach(x=>{x.checked=k==='all';if(x.dataset.parent!=null)x.disabled=k==='none';});pickCount();return true;}
+    if(k==='cancel'){closePicker();return true;}
+    if(k==='go'){pickSave();closePicker();download(fileBase()+'_documentation.html',buildDocHtml(),'text/html');return true;}
+  }
+  const c=e.target.closest('input[data-sec]');
+  if(c){$('#impBody').querySelectorAll('input[data-parent="'+c.dataset.sec+'"]').forEach(x=>x.disabled=!c.checked);pickCount();return true;}
+  return !!e.target.closest('.pick');
+}
+function closePicker(){$('#imp').classList.add('hidden');$('#impBody').classList.remove('wide');}
+
+function buildDocHtml(){
+  const heads=[];const g=buildGraph(S,false,true);
+  const body=mdToHtml(filterMd(buildMarkdown(true,true)),legendHtml(S,false)+g.svg,heads);
+  let toc='<ul class="toc-list">',open=false;
+  heads.filter(x=>x.n===2||x.n===3).forEach(x=>{
+    if(x.n===2){if(open)toc+='</ul></li>';toc+='<li><a href="#'+x.id+'">'+x.html+'</a><ul>';open=true;}
+    else toc+='<li><a href="#'+x.id+'">'+x.html+'</a></li>';});
+  if(open)toc+='</ul></li>';toc+='</ul>';
+  toc=toc.replace(/<ul><\/ul>/g,'');
+  const css=$('#base-css').textContent+DOC_CSS;
+  const title=notes.overview.title||defaultTitle();
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+'</title><style>'+css+'</style></head><body><div class="dwrap"><nav class="toc" id="tocd"><div class="toc-h"><b>Contents</b><button type="button" id="toct" aria-label="Show contents">Contents \u25BE</button></div><input class="in" id="dq" type="search" placeholder="Search this document  ( / )" autocomplete="off"><div id="dres" hidden></div>'+toc+'</nav><main class="doc">'+body+'</main></div><script>'+DOC_JS+'</'+'script></body></html>';
+}
+
+function download(name,text,type){
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800);
+}
+const fileBase=()=>(project||'project').replace(/[^\w-]+/g,'_');
+
+/* ---------- render ---------- */
+const TABS_ALL=[['overview','Overview'],['exec','How it runs'],['lineage','Data flow'],['scripts','Scripts'],['columns','Columns'],['tables','Table catalog'],['review','Review'],['tools','Tools & files']];
+const $=s=>document.querySelector(s);
+const chip=(n,internal)=>'<span class="chip'+(internal?' int':'')+'" data-table="'+esc(n)+'" title="Open in table catalog">'+esc(n)+'</span>';
+const tchips=arr=>arr.length?arr.map(n=>chip(n,!!S.prod[n])).join(''):'<span class="muted">none detected</span>';
+const slink=s=>'<a data-goto="'+s.idx+'">'+esc(s.logical||s.name)+'</a>';
+const slinks=set=>{const a=[...set];return a.length?a.map(slink).join(', '):'<span class="muted">none</span>';};
+const colchip=c=>'<span class="chip" data-col="'+esc(c)+'" title="Search this column">'+esc(c)+'</span>';
+const stat=(n,l)=>'<div class="stat"><b>'+n+'</b><span>'+l+'</span></div>';
+
+function renderOverview(){
+  const o=notes.overview,c=S.counts;
+  let h='<div class="card"><label class="lbl edit-hint" style="margin-top:0">Document title</label><input class="in" data-nk="overview" data-k="title" value="'+esc(o.title||defaultTitle())+'">';
+  h+='<div class="stats">'+stat(S.scripts.length,'SQL scripts')+stat(S.tables.length,'tables')+stat(c.source,'source tables')+stat(c.output,'output tables')+stat(S.maxDepth+1,'dependency steps')+(READONLY?'':stat(S.flags.total,'review items'))+'</div></div>';
+  h+='<div class="grid2">'+OV_FIELDS.map(f=>'<div class="card"><label class="lbl" style="margin-top:0">'+f[1]+'</label><textarea rows="4" data-nk="overview" data-k="'+f[0]+'" placeholder="'+esc(f[2])+'">'+esc(o[f[0]]||'')+'</textarea></div>').join('')+'</div>';
+  h+='<div class="card"><h3>Layers</h3><p class="muted edit-hint" style="margin:0 0 10px">One plain sentence per layer. This becomes the backbone of the document.</p><div class="tw"><table><thead><tr><th>Layer</th><th>Scripts</th><th>Tables written</th><th style="width:45%">What it does</th></tr></thead><tbody>';
+  S.layers.forEach(l=>{const w=new Set();l.scripts.forEach(s=>s.targets.forEach(t=>w.add(t)));
+    h+='<tr><td><span class="dot" style="background:'+LAYER_COLOR[l.name]+'"></span>'+esc(cap(l.name))+'</td><td>'+l.scripts.length+'</td><td>'+w.size+'</td><td><input class="in" data-nk="layers" data-k="'+esc(l.name)+'" value="'+esc(notes.layers[l.name]||'')+'" placeholder="'+esc(LAYER_HINT[l.name]||'')+'"></td></tr>';});
+  h+='</tbody></table></div></div>';
+  const src=S.tables.filter(t=>t.kind==='source'),out=S.tables.filter(t=>t.kind==='output');
+  h+='<div class="card"><h3>Source tables <span class="muted">\u00B7 read but never written here ('+src.length+')</span></h3>'+(src.map(t=>chip(t.name,false)).join('')||'<span class="muted">none</span>')+'</div>';
+  h+='<div class="card"><h3>Output tables <span class="muted">\u00B7 fact and agg tables ('+out.length+'); everything else is a transformation table</span></h3>'+(out.map(t=>chip(t.name,true)).join('')||'<span class="muted">none</span>')+'</div>';
+  if(S.mds.length)h+='<div class="card"><h3>Existing notes in the folder</h3>'+S.mds.map(m=>'<details><summary>'+esc(m.name)+'</summary><pre>'+esc(m.text)+'</pre></details>').join('')+'</div>';
+  return h;
+}
+function renderLineage(){
+  return '<div class="toolbar"><label><input type="checkbox" id="srcT"'+(showSrc?' checked':'')+'> Show source tables</label>'+(S.families.length?'<label><input type="checkbox" id="famT"'+(groupFam?' checked':'')+'> Group daily/backup/union helpers</label>':'')+'<button id="zout">\u2212</button><button id="zin">+</button><button id="zfit">Fit width</button><span class="muted">Click a box to trace what feeds it and what it feeds. Each column is one dependency step.</span></div><div id="glegend"></div><div class="card info" id="ginfo"><span class="muted">Nothing selected.</span></div><div class="graphwrap" id="gwrap"></div>';
+}
+function renderScripts(){
+  let h='<div class="toolbar"><input class="in" id="scq" placeholder="Filter by script or table name\u2026"><button id="scOpen">Expand all</button><button id="scClose">Collapse all</button></div>';
+  S.layers.forEach(l=>{
+    h+='<div class="layerh" data-layer="'+l.name+'"><span class="dot" style="background:'+LAYER_COLOR[l.name]+'"></span>'+esc(l.name)+' <span class="muted">'+l.scripts.length+'</span></div>';
+    l.scripts.forEach(s=>{
+      h+='<details class="card sc" id="sc-'+s.idx+'" data-search="'+esc((s.name+' '+s.targets.join(' ')+' '+s.sources.join(' ')).toLowerCase())+'"><summary>'+(s.order?'<span class="ord">'+esc(s.order)+'</span>':'')+'<b>'+esc(s.logical||s.name)+'</b>'+(s.engine?' <span class="muted">\u00B7 '+esc(s.engine)+'</span>':'')+'<span class="tgt muted">\u2192 '+esc(s.targets.join(', ')||'no output table detected')+'</span></summary>';
+      h+='<div class="kv"><div>File</div><div><code>'+esc(s.key)+'</code>'+(s.executes?'':' <span class="muted">\u00B7 not run by the executor (only top-level .sql files run)</span>')+'</div><div>Writes</div><div>'+tchips(s.targets)+(s.implicit?' <span class="muted">result table, named after the file</span>':'')+'</div><div>Reads</div><div>'+tchips(s.sources)+'</div>';
+      if(s.temps.length)h+='<div>Temp tables</div><div>'+s.temps.map(t=>'<code>'+esc(t)+'</code>').join(' ')+'</div>';
+      const oc=[...new Set(s.defs.filter(d=>d.ctx==='table'||d.ctx==='result').map(d=>d.name))];
+      if(oc.length)h+='<div>Columns out</div><div>'+oc.map(colchip).join('')+'</div>';
+      h+='<div>Runs after</div><div>'+slinks(s.up)+'</div><div>Feeds</div><div>'+slinks(s.down)+'</div>';
+      if(s.vars.length)h+='<div>Parameters</div><div>'+s.vars.map(v=>'<code>'+esc(v)+'</code>').join(' ')+'</div>';
+      if(s.partitions.length)h+='<div>Partitions</div><div>'+s.partitions.map(v=>'<code>'+esc(v)+'</code>').join(' ')+'</div>';
+      h+='<div>Size</div><div>'+s.lines+' lines \u00B7 '+s.stmtCount+' statements</div></div>';
+      h+='<label class="lbl">Purpose / business logic</label><textarea rows="3" data-nk="scripts" data-k="'+esc(s.key)+'" placeholder="What does this script do and why? Grain (one row per\u2026), key filters, gotchas.">'+esc(notes.scripts[s.key]!=null?notes.scripts[s.key]:s.desc)+'</textarea>';
+      h+='<details class="sqlv" style="margin-top:8px"><summary class="muted" style="cursor:pointer">View SQL</summary><pre data-sql="'+s.idx+'"></pre></details></details>';
+    });
+  });
+  return h;
+}
+
+let planMode=null;
+function renderExec(){
+  const box=$('#execbox');if(!box)return;
+  const E=computeExec();if(!planMode)planMode=E.mode==='debug'||E.mode==='standalone'?E.mode:'production';
+  const onOf=r=>planMode==='debug'?r.dbg:planMode==='standalone'?r.sta:r.prod;
+  const opt=(k,cur,re)=>'<select data-nk="exec" data-k="'+k+'"><option value="">(none)</option>'+S.pys.map(p=>'<option value="'+esc(p.key)+'"'+(cur===p?' selected':'')+'>'+esc(p.key)+'</option>').join('')+'</select>';
+  const vopt=(k,cur)=>'<select data-nk="exec" data-k="'+k+'"><option value="">(none)</option>'+[...new Set(E.debugLists.map(a=>a.name))].map(n=>'<option'+(n===cur?' selected':'')+'>'+esc(n)+'</option>').join('')+'</select>';
+  const L=[];execMarkdown(E,L,false);
+  const desc=L.join('\n');
+  let h='<div class="card doclike">'+mdToHtml(desc,'')+'</div>';
+  if(READONLY)h+='<div class="hidden">';
+  h+='<div class="card"><h3>Config files <span class="muted">\u00B7 auto-detected, change if wrong</span></h3><div class="cfg">';
+  h+='<label>Executor</label>'+opt('executor',E.executor)+'<span class="muted">'+(E.mode?'mode = \''+esc(E.mode)+'\'':'no <code>mode = ...</code> found')+'</span>';
+  h+='<label>Refresh list</label>'+opt('refresh',E.refresh)+'<span class="muted">'+E.refreshItems.length+' tables</span>';
+  h+='<label>Output list</label>'+opt('output',E.output)+'<span class="muted">'+E.outMap.size+' tables</span>';
+  h+='<label>Debug lists</label>'+opt('debug',E.debug)+'<span class="muted">'+(E.debugOk?pl(E.inc.length,'table')+' in exact_table, '+E.exc.length+' excluded':'no <code>debug = {...}</code> found')+'</span>';
+  h+='<label>Standalone lists</label>'+opt('standalone',E.standalone)+'<span class="muted">'+(E.standaloneOk?pl(E.sinc.length,'table')+' in exact_table, '+E.sexc.length+' excluded':'no <code>standalone = {...}</code> found')+'</span>';
+  h+='</div></div>';
+  if(READONLY)h+='</div>';
+  if(READONLY)planMode='production';
+  const ck=execChecks(E,READONLY);
+  if(ck.length)h+='<div class="card flag"><h3>Config checks <span class="muted">('+ck.length+')</span></h3><ul>'+ck.map(c=>'<li><b>'+mdInline(c[0])+'.</b> '+mdInline(c[1])+'</li>').join('')+'</ul></div>';
+  const runs=E.rows.filter(onOf);
+  h+='<div class="card"><div class="toolbar" style="margin:0 0 10px"><h3 style="margin:0">Run plan</h3><div class="seg'+(READONLY?' hidden':'')+'"><button data-plan="production"'+(planMode==='production'?' class="on"':'')+'>Production</button><button data-plan="debug"'+(planMode==='debug'?' class="on"':'')+'>Debug</button><button data-plan="standalone"'+(planMode==='standalone'?' class="on"':'')+'>Standalone</button></div><span class="muted">'+runs.length+' of '+E.rows.length+' scripts run \u00B7 '+runs.filter(r=>r.out).length+' written to Hive</span></div>';
+  h+='<div class="tw"><table><thead><tr><th>#</th><th>Script</th><th>Engine</th><th>Result table</th><th>Output to Hive</th><th>Status</th></tr></thead><tbody>';
+  let n=0;
+  E.rows.forEach(r=>{const s=r.s,on=onOf(r);
+    const why=!r.prod?r.why:(planMode==='debug'&&!r.dbg?r.dwhy:planMode==='standalone'&&!r.sta?r.swhy:'');
+    const st=planMode==='debug'?r.stale:planMode==='standalone'?r.sstale:null;
+    const stale=on&&st&&st.length?'<div class="warn-t">reads '+st.map(u=>esc(u.logical)).join(', ')+', which doesn\u2019t run in this mode</div>':'';
+    h+='<tr class="'+(on?'':'off')+'"><td>'+(on?++n:'')+'</td><td><a data-goto="'+s.idx+'">'+esc(s.name)+'</a></td><td>'+esc(s.engine||'')+'</td><td>'+tchips(s.targets)+'</td><td>'+(r.out?'<span class="kind output">yes</span>'+(r.out.part?' <code>'+esc(r.out.part)+'</code>':'')+(r.out.note?' <span class="muted">'+esc(r.out.note)+'</span>':''):'')+'</td><td>'+(on?'<span class="kind output">runs</span>':'<span class="kind">skipped</span> <span class="muted">'+esc(why)+'</span>')+stale+'</td></tr>';});
+  h+='</tbody></table></div></div>';
+  h+='<div class="card"><label class="lbl" style="margin-top:0">Extra notes for this section</label><textarea rows="3" data-nk="exec" data-k="notes" placeholder="How to switch mode, how to rerun one table, how to backfill a date, where logs go (run_log.txt)\u2026">'+esc(E.st.notes||'')+'</textarea></div>';
+  box.innerHTML=h;roPass(box);
+}
+function renderColumns(){
+  return '<div class="toolbar"><input class="in" id="colq" list="collist" autocomplete="off" placeholder="Type a column name, e.g. txn_amount"><datalist id="collist">'+S.colNames.map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist><span class="muted">Exact name, not case-sensitive.</span></div><div id="colres"></div>';
+}
+const ROLE={def:['Defined','r-def'],rename:['Renamed','r-def'],pass:['Passed through','r-pass'],feeds:['Used to compute','r-feed'],update:['Updated','r-def'],
+  filter:['Filter','r-filt'],having:['Having','r-filt'],join:['Join key','r-join'],group:['Group by','r-grp'],order:['Order by','r-grp'],window:['Window','r-grp'],
+  partition:['Partition','r-grp'],insert:['Insert column','r-pass'],select:['Selected','r-pass'],source:['From clause','r-pass'],other:['Other','r-pass']};
+const intoLabel=d=>d.ctx==='cte'?'CTE '+d.into:d.ctx==='subquery'?'a subquery':d.into;
+function hl(text,c){return esc(text).replace(new RegExp('(?<![\\w$])('+escRe(c)+')(?![\\w$])','gi'),'<mark>$1</mark>');}
+const clip=(t,n)=>t.length>n?t.slice(0,n)+' …':t;
+function walkScripts(start,dir){const seen=new Set(start),q=[...start];while(q.length){const s=q.pop();s[dir].forEach(x=>{if(!seen.has(x)){seen.add(x);q.push(x);}});}return seen;}
+const ancCache=new Map();
+function ancestorsOf(s){if(!ancCache.has(s))ancCache.set(s,walkScripts([s],'up'));return ancCache.get(s);}
+const inter=(a,b)=>b?new Set([...a].filter(x=>b.has(x))):a;
+function upTree(c,depth,seen,bud,scope,into,tag){
+  const e=S.colIndex[c];let defs=e?e.defs.filter(x=>!scope||scope.has(x.s)):[];
+  if(into)defs=defs.filter(x=>x.d.ctx==='table'&&x.d.into===into);
+  const tf=defs.filter(x=>!x.d.pass);
+  const lab='<a data-col="'+esc(c)+'"><code>'+esc(c)+'</code></a>';
+  if(into&&!tf.length&&defs.length){
+    let sc2=new Set();defs.forEach(x=>ancestorsOf(x.s).forEach(y=>sc2.add(y)));defs.forEach(x=>sc2.delete(x.s));sc2=inter(sc2,scope);
+    return '<li>'+lab+' <span class="muted">copied unchanged into '+esc(into)+' ('+defs.map(x=>slink(x.s)).join(', ')+'), from upstream:</span><ul>'+upTree(c,depth+1,seen,bud,sc2,null,'@'+defs[0].s.idx)+'</ul></li>';
+  }
+  if(!tf.length){const tb=[...new Set(defs.filter(x=>x.d.ctx==='table').map(x=>x.d.into))];
+    return '<li>'+lab+' <span class="muted">'+(tb.length?'copied unchanged through '+tb.map(esc).join(' → '):'comes straight from a source table')+'</span></li>';}
+  const key=c+(tag||'');
+  if(seen.has(key)||depth>5||bud.n<=0)return '<li>'+lab+' <span class="muted">(shown above)</span></li>';
+  seen.add(key);
+  return '<li>'+lab+'<ul>'+tf.map(x=>{bud.n--;
+    const anc=inter(ancestorsOf(x.s),scope);
+    const others=x.d.refs.filter(r=>r!==c),self=x.d.refs.includes(c);
+    let sub='';
+    if(bud.n>0){
+      sub=others.map(r=>upTree(r,depth+1,seen,bud,anc,null)).join('');
+      if(self){const prev=new Set(anc);prev.delete(x.s);if(prev.size)sub+=upTree(c,depth+1,seen,bud,prev,null,'@'+x.s.idx);}
+    }
+    return '<li><span class="muted">in '+esc(intoLabel(x.d))+' · '+slink(x.s)+'</span><div class="expr">'+hl(clip(x.d.expr,500),c)+'</div>'+(sub?'<ul>'+sub+'</ul>':'')+'</li>';}).join('')+'</ul></li>';
+}
+function downTree(c,depth,seen,bud,scope){
+  const e=S.colIndex[c],f=e?e.feeds.filter(x=>!scope||scope.has(x.s)):[];
+  if(!f.length)return '';
+  if(depth>4||bud.n<=0)return '<li class="muted">…</li>';
+  return f.map(x=>{const k=x.d.name+'@'+x.d.into+'@'+x.s.idx;if(seen.has(k))return '';seen.add(k);bud.n--;
+    const sub=downTree(x.d.name,depth+1,seen,bud,scope);
+    return '<li><a data-col="'+esc(x.d.name)+'"><code>'+esc(x.d.name)+'</code></a> <span class="muted">in '+esc(intoLabel(x.d))+' · '+slink(x.s)+'</span><div class="expr">'+hl(clip(x.d.expr,500),c)+'</div>'+(sub?'<ul>'+sub+'</ul>':'')+'</li>';}).join('');
+}
+function hitRow(s,h,c){
+  const r=ROLE[h.role]||ROLE.other;let body;
+  if(h.d){body='<code>'+esc(intoLabel(h.d))+'.'+esc(h.d.name)+'</code> = <span class="expr">'+hl(clip(h.d.expr,500),c)+'</span>';}
+  else body='<span class="expr">'+hl(clip((s.rawLines[h.line-1]||'').trim(),300),c)+'</span>';
+  return '<div class="hit"><span class="role '+r[1]+'">'+r[0]+'</span><span class="ln">L'+h.line+'</span><div>'+body+'</div></div>';
+}
+let colScope='',colCur='';
+function renderColumn(q){
+  const box=$('#colres'),c=(q||'').trim().toLowerCase().replace(/^.*\./,'');
+  if(c!==colCur){colCur=c;colScope='';}
+  if(!c){
+    const top=S.colNames.map(n=>[n,S.colIndex[n].scripts.size]).sort((a,b)=>b[1]-a[1]).slice(0,40);
+    box.innerHTML='<div class="card"><h3>Find a column</h3><p class="muted" style="margin:0 0 10px">Type a name above, or pick one of the most-used columns. You’ll see how it is built, what it feeds, and every line that touches it.</p>'+top.map(t=>colchip(t[0])).join('')+'</div>';return;
+  }
+  let res=S.scripts.map(s=>({s,hits:columnHits(s,c)})).filter(x=>x.hits.length);
+  if(!res.length){
+    const like=S.colNames.filter(n=>n.includes(c)||c.includes(n)&&n.length>3).slice(0,30);
+    box.innerHTML='<div class="card">No script mentions <code>'+esc(c)+'</code>.'+(like.length?'<div style="margin-top:8px">Similar names: '+like.map(colchip).join('')+'</div>':'')+'</div>';return;
+  }
+  const e=S.colIndex[c]||{defs:[],feeds:[]};
+  const tabs=[...new Set(e.defs.filter(x=>x.d.ctx==='table').map(x=>x.d.into))].sort((a,b)=>{const ia=Math.min(...e.defs.filter(x=>x.d.into===a).map(x=>x.s.idx)),ib=Math.min(...e.defs.filter(x=>x.d.into===b).map(x=>x.s.idx));return ia-ib;});
+  if(colScope&&!tabs.includes(colScope))colScope='';
+  let upS=null,downS=null;
+  if(colScope){const SA=new Set(e.defs.filter(x=>x.d.ctx==='table'&&x.d.into===colScope).map(x=>x.s));upS=walkScripts(SA,'up');downS=walkScripts(SA,'down');res=res.filter(x=>upS.has(x.s));}
+  const defsIn=upS?e.defs.filter(x=>upS.has(x.s)):e.defs;
+  const tf=defsIn.filter(x=>!x.d.pass);
+  const all=res.flatMap(x=>x.hits),cnt=r=>all.filter(h=>h.role===r).length;
+  const feeds=new Set(e.feeds.filter(x=>!downS||downS.has(x.s)).map(x=>x.d.name));
+  let h='<div class="card"><h2 style="margin:0 0 4px"><code>'+esc(c)+'</code></h2>';
+  if(tabs.length){
+    h+='<div class="scope"><span class="muted">Trace it for table:</span><label><input type="radio" name="cscope" value=""'+(colScope?'':' checked')+'> all tables</label>'+tabs.map(t=>'<label><input type="radio" name="cscope" value="'+esc(t)+'"'+(t===colScope?' checked':'')+'> <code>'+esc(t)+'</code></label>').join('')+'</div>';
+    h+='<p class="muted" style="margin:6px 0 0;font-size:12.5px">'+(colScope?'Showing only the logic that runs before <code>'+esc(colScope)+'</code> is built (its script and everything upstream of it). “What it feeds” shows what comes after.':'Pick a table to see only the logic that runs before that table is built.')+'</p>';
+  }
+  h+='<div class="stats">'+stat(res.length,'scripts')+stat(tf.length,'transformations')+stat(defsIn.length-tf.length,'pass-throughs')+stat(feeds.size,'columns built from it')+stat(cnt('filter')+cnt('having'),'filters')+stat(cnt('join'),'join keys')+'</div>';
+  h+='<label class="lbl">Meaning (goes into the Column glossary when you export)</label><textarea rows="2" data-nk="columns" data-k="'+esc(c)+'" placeholder="Business definition, unit, allowed values, gotchas.">'+esc(notes.columns[c]||'')+'</textarea></div>';
+  const up='<ul class="tree">'+upTree(c,0,new Set(),{n:80},upS,colScope||null)+'</ul>';
+  const dn=downTree(c,0,new Set(),{n:80},downS);
+  h+='<div class="grid2"><div class="card"><h3>How it’s built <span class="muted">· upstream'+(colScope?' of '+esc(colScope):'')+'</span></h3>'+up+'</div><div class="card"><h3>What it feeds <span class="muted">· downstream'+(colScope?' of '+esc(colScope):'')+'</span></h3>'+(dn?'<ul class="tree">'+dn+'</ul>':'<span class="muted">No other column is computed from it'+(colScope?' after this table':'')+'.</span>')+'</div></div>';
+  h+='<h3 style="margin:18px 0 8px">Every occurrence <span class="muted">· in run order'+(colScope?', up to '+esc(colScope):'')+'</span></h3>';
+  res.forEach(x=>{h+='<details class="card sc"'+(res.length<=8?' open':'')+'><summary><b>'+esc(x.s.logical||x.s.name)+'</b> <span class="muted">· '+x.hits.length+' hit'+(x.hits.length>1?'s':'')+' · <a data-goto="'+x.s.idx+'">open script</a></span><span class="tgt muted">→ '+esc(x.s.targets.join(', ')||'no output table')+'</span></summary><div style="margin-top:8px">'+x.hits.map(hh=>hitRow(x.s,hh,c)).join('')+'</div></details>';});
+  box.innerHTML=h;roPass(box);
+}
+function gotoColumn(c){setTab('columns');$('#colq').value=c;renderColumn(c);}
+function renderTables(){
+  let h='<div class="toolbar"><input class="in" id="catq" placeholder="Filter tables\u2026"><select id="catk"><option value="">All kinds</option><option value="source">Source</option><option value="transformation">Transformation</option><option value="output">Output</option></select><span class="muted" id="catn"></span></div>';
+  h+='<div class="card" style="padding:0"><div class="tw"><table><thead><tr><th>Table</th><th>Kind</th><th>Written by</th><th>Read by</th><th style="width:30%">Notes (grain, keys, meaning)</th></tr></thead><tbody>';
+  S.tables.forEach(t=>{h+='<tr data-name="'+esc(t.name)+'" data-kind="'+t.kind+'"><td><code>'+esc(t.name)+'</code></td><td><span class="kind '+t.kind+'">'+t.kind+'</span></td><td>'+(t.p.map(slink).join(', ')||'<span class="muted">\u2014</span>')+'</td><td>'+(t.c.map(slink).join(', ')||'<span class="muted">\u2014</span>')+'</td><td><input class="in" data-nk="tables" data-k="'+esc(t.name)+'" value="'+esc(notes.tables[t.name]||'')+'" placeholder="e.g. one row per contract per day"></td></tr>';});
+  return h+'</tbody></table></div></div>';
+}
+function renderReview(){
+  if(!S.flags.groups.length)return '<div class="card">Nothing flagged.</div>';
+  return '<p class="muted" style="margin:0 0 12px">Automatic checks. Not all of these are problems, but each is worth a line in the document so your teammate isn\u2019t surprised.</p>'+S.flags.groups.map(g=>'<div class="card flag"><h3>'+esc(g.title)+' <span class="muted">('+g.items.length+')</span></h3><div class="muted" style="font-size:13px">'+esc(g.why)+'</div><ul>'+g.items.map(i=>'<li>'+mdInline(i)+'</li>').join('')+'</ul></div>').join('');
+}
+function renderTools(){
+  let h='';
+  if(S.pys.length){h+='<h2>Python tools</h2>';S.pys.forEach(p=>{
+    h+='<div class="card"><h3><code>'+esc(p.name)+'</code>'+(p.isMain?' <span class="muted">\u00B7 runnable script</span>':'')+'</h3><div class="kv" style="margin-top:4px">';
+    h+='<div>Functions</div><div>'+(p.defs.map(d=>'<code>'+esc(d)+'</code>').join(' ')||'<span class="muted">none</span>')+'</div>';
+    h+='<div>Files referenced</div><div>'+(p.refs.map(d=>'<code>'+esc(d)+'</code>').join(' ')||'<span class="muted">none</span>')+'</div>';
+    h+='<div>Tables mentioned</div><div>'+(p.tables.length?p.tables.map(t=>chip(t,true)).join(''):'<span class="muted">none</span>')+'</div></div>';
+    h+='<label class="lbl">What it does / how to use it</label><textarea rows="3" data-nk="files" data-k="'+esc(p.key)+'" placeholder="e.g. Runs all SQL in order. Usage: python standalone.py --date 2026-10-01">'+esc(notes.files[p.key]!=null?notes.files[p.key]:p.desc)+'</textarea>';
+    h+='<details style="margin-top:8px"><summary class="muted" style="cursor:pointer">View code</summary><pre>'+esc(p.raw)+'</pre></details></div>';});}
+  if(S.texts.length){h+='<h2>Config & text files</h2>';S.texts.forEach(t=>{
+    h+='<div class="card"><h3><code>'+esc(t.name)+'</code> <span class="muted">\u00B7 '+t.lines+' lines</span></h3><textarea rows="2" data-nk="files" data-k="'+esc(t.key)+'" placeholder="What is this file for? Who edits it?">'+esc(notes.files[t.key]||'')+'</textarea><details style="margin-top:8px"><summary class="muted" style="cursor:pointer">Preview</summary><pre>'+esc(t.text.split('\n').slice(0,60).join('\n'))+'</pre></details></div>';});}
+  return h||'<div class="card">No Python or config files found.</div>';
+}
+
+function drawGraph(){
+  const g=buildGraph(S,showSrc,groupFam);graphLinks=g.links;
+  $('#glegend').innerHTML=legendHtml(S,showSrc);
+  $('#gwrap').innerHTML=g.svg;applyZoom();selectNode(null);
+}
+function applyZoom(){const svg=$('#gwrap svg');if(!svg)return;const w=+svg.dataset.w;svg.setAttribute('width',Math.round(w*zoom));svg.setAttribute('height',Math.round(+svg.getAttribute('viewBox').split(' ')[3]*zoom));}
+function selectNode(id){
+  const svg=$('#gwrap svg');if(!svg)return;
+  if(!id){svg.classList.remove('focus');svg.querySelectorAll('.hl').forEach(e=>e.classList.remove('hl'));$('#ginfo').innerHTML='<span class="muted">Nothing selected.</span>';return;}
+  const up={},down={};graphLinks.forEach(l=>{(down[l.from]=down[l.from]||[]).push(l.to);(up[l.to]=up[l.to]||[]).push(l.from);});
+  const walk=adj=>{const seen=new Set([id]),q=[id];while(q.length){const x=q.pop();(adj[x]||[]).forEach(y=>{if(!seen.has(y)){seen.add(y);q.push(y);}});}return seen;};
+  const keep=new Set([...walk(up),...walk(down)]);
+  svg.classList.add('focus');
+  svg.querySelectorAll('g.node').forEach(e=>e.classList.toggle('hl',keep.has(e.dataset.id)));
+  svg.querySelectorAll('path').forEach(e=>e.classList.toggle('hl',keep.has(e.dataset.from)&&keep.has(e.dataset.to)));
+  if(id.startsWith('s:')){const s=S.scripts[+id.slice(2)];
+    $('#ginfo').innerHTML='<b>'+esc(s.name)+'</b> <span class="muted">\u00B7 '+esc(s.layer)+'</span> \u2014 <a data-goto="'+s.idx+'">open details</a><div style="margin-top:4px">Writes '+tchips(s.targets)+'</div><div>Reads '+tchips(s.sources)+'</div>';}
+  else{const n=id.slice(2),t=S.tables.find(x=>x.name===n);
+    $('#ginfo').innerHTML='<b>'+esc(n)+'</b> <span class="muted">\u00B7 source table</span><div style="margin-top:4px">Read by '+(t?t.c.map(slink).join(', '):'')+'</div>';}
+}
+
+function setTab(id){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===id));
+  document.querySelectorAll('main > section').forEach(s=>s.classList.toggle('hidden',s.id!=='tab-'+id));
+  if(id==='lineage'&&!$('#gwrap svg'))drawGraph();
+  window.scrollTo(0,0);
+}
+function gotoScript(idx){
+  setTab('scripts');$('#scq').value='';filterScripts();
+  const el=$('#sc-'+idx);if(!el)return;el.open=true;
+  setTimeout(()=>el.scrollIntoView({block:'start',behavior:'smooth'}),30);
+}
+function gotoTable(n){setTab('tables');$('#catq').value=n;$('#catk').value='';filterTables();}
+function filterScripts(){
+  const q=$('#scq').value.trim().toLowerCase();
+  document.querySelectorAll('details.sc').forEach(d=>d.classList.toggle('hidden',!!q&&!d.dataset.search.includes(q)));
+  document.querySelectorAll('.layerh').forEach(h=>{let n=h.nextElementSibling,any=false;while(n&&n.matches('details.sc')){if(!n.classList.contains('hidden'))any=true;n=n.nextElementSibling;}h.classList.toggle('hidden',!any);});
+}
+function filterTables(){
+  const q=$('#catq').value.trim().toLowerCase(),k=$('#catk').value;let n=0;
+  document.querySelectorAll('#tab-tables tbody tr').forEach(r=>{const ok=(!q||r.dataset.name.includes(q))&&(!k||r.dataset.kind===k);r.classList.toggle('hidden',!ok);if(ok)n++;});
+  $('#catn').textContent=n+' of '+S.tables.length;
+}
+
+function showApp(){
+  $('#landing').classList.add('hidden');$('#app').classList.remove('hidden');
+  const TABS=TABS_ALL.filter(t=>!(READONLY&&t[0]==='review'));
+  $('#tabs').innerHTML=TABS.map(t=>'<button data-tab="'+t[0]+'">'+t[1]+(t[0]==='review'&&S.flags.total?' ('+S.flags.total+')':'')+'</button>').join('');
+  const R={overview:renderOverview,exec:()=>'<div id="execbox"></div>',lineage:renderLineage,scripts:renderScripts,columns:renderColumns,tables:renderTables,review:renderReview,tools:renderTools};
+  $('#main').innerHTML=TABS.map(t=>'<section id="tab-'+t[0]+'" class="hidden">'+R[t[0]]()+'</section>').join('');
+  zoom=1;planMode=null;filterTables();renderColumn('');renderExec();roPass($('#main'));setTab('overview');
+}
+
+async function walkEntry(entry,path,out){
+  if(entry.isFile){await new Promise(r=>entry.file(f=>{out.push({file:f,path:path+f.name});r();},()=>r()));return;}
+  if(entry.isDirectory){
+    const rd=entry.createReader(),all=[];
+    for(;;){const batch=await new Promise(r=>rd.readEntries(r,()=>r([])));if(!batch.length)break;all.push(...batch);}
+    for(const e of all)await walkEntry(e,path+entry.name+'/',out);
+  }
+}
+async function ingest(list){
+  const files=[];
+  for(const it of list){
+    if(!/\.(sql|hql|txt|py|md)$/i.test(it.file.name)||it.file.size>8e6)continue;
+    if(/(^|\/)(\.git|node_modules|__pycache__|\.ipynb_checkpoints)\//.test(it.path))continue;
+    files.push({name:it.file.name,path:it.path,text:await it.file.text()});
+  }
+  if(!files.length){alert('No .sql, .hql, .txt, .py or .md files found there.');return;}
+  const parts=files[0].path.split('/');
+  project=parts.length>1?parts[0]:'sql_project';
+  files.forEach(f=>{f.key=parts.length>1?f.path.split('/').slice(1).join('/'):f.path;});
+  try{S=analyze(files);S.files=files;ancCache.clear();loadNotes();showApp();}
+  catch(err){console.error(err);$('#landing').classList.add('hidden');$('#app').classList.remove('hidden');
+    $('#main').innerHTML='<div class="card flag"><h3>Something went wrong reading this folder</h3><p>Your notes are safe. You can export them below, then send me the error text.</p><pre>'+esc(String(err&&err.stack||err).slice(0,1500))+'</pre><div class="row-end"><button onclick="exportNotes()">Export notes</button></div></div>';}
+}
+
+if(typeof document!=='undefined'){
+  const drop=$('#drop');
+  $('#pickDir').onclick=()=>$('#dirIn').click();
+  $('#pickFiles').onclick=()=>$('#filesIn').click();
+  $('#reload').onclick=()=>$('#dirIn').click();
+  $('#dirIn').onchange=e=>{ingest([...e.target.files].map(f=>({file:f,path:f.webkitRelativePath||f.name})));e.target.value='';};
+  $('#filesIn').onchange=e=>{ingest([...e.target.files].map(f=>({file:f,path:f.name})));e.target.value='';};
+  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+  drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+  drop.addEventListener('drop',async e=>{
+    e.preventDefault();drop.classList.remove('over');
+    const ents=[...e.dataTransfer.items].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean),out=[];
+    if(ents.length){for(const en of ents)await walkEntry(en,'',out);}else[...e.dataTransfer.files].forEach(f=>out.push({file:f,path:f.name}));
+    ingest(out);
+  });
+
+  document.addEventListener('input',e=>{
+    const el=e.target;
+    if(el.dataset&&el.dataset.nk){(notes[el.dataset.nk]=notes[el.dataset.nk]||{})[el.dataset.k]=el.value;saveNotes();if(el.dataset.nk==='exec'&&el.tagName==='SELECT'){if(el.dataset.k==='debug'){delete notes.exec.incVar;delete notes.exec.excVar;}renderExec();}return;}
+    if(el.id==='scq')filterScripts();
+    if(el.id==='catq')filterTables();
+    if(el.id==='colq'){clearTimeout(window.__ct);window.__ct=setTimeout(()=>renderColumn(el.value),220);}
+  });
+  document.addEventListener('change',e=>{
+    if(e.target.id==='catk')filterTables();
+    if(e.target.dataset&&e.target.dataset.nk==='exec'&&e.target.tagName==='SELECT'&&notes.exec[e.target.dataset.k]!==e.target.value){notes.exec[e.target.dataset.k]=e.target.value;saveNotes();renderExec();}
+    if(e.target.id==='srcT'){showSrc=e.target.checked;drawGraph();}
+    if(e.target.id==='famT'){groupFam=e.target.checked;drawGraph();}
+    if(e.target.name==='cscope'){colScope=e.target.value;renderColumn($('#colq').value);}
+  });
+  document.addEventListener('toggle',e=>{
+    const d=e.target;if(!d.classList||!d.classList.contains('sqlv')||!d.open)return;
+    const pre=d.querySelector('pre[data-sql]');if(pre&&!pre.textContent)pre.textContent=S.scripts[+pre.dataset.sql].raw;
+  },true);
+  document.addEventListener('click',e=>{
+    const t=e.target.closest('[data-plan],[data-tab],[data-goto],[data-table],[data-col],g.node,#zin,#zout,#zfit,#scOpen,#scClose,#gwrap');
+    if(!t)return;
+    if(t.dataset.plan){planMode=t.dataset.plan;renderExec();return;}
+    if(t.dataset.tab){setTab(t.dataset.tab);return;}
+    if(t.dataset.goto!=null){e.preventDefault();gotoScript(+t.dataset.goto);return;}
+    if(t.dataset.table){gotoTable(t.dataset.table);return;}
+    if(t.dataset.col){gotoColumn(t.dataset.col);return;}
+    if(t.matches('g.node')){selectNode(t.dataset.id);return;}
+    if(t.id==='gwrap'){selectNode(null);return;}
+    if(t.id==='zin'){zoom=Math.min(2,zoom*1.2);applyZoom();}
+    if(t.id==='zout'){zoom=Math.max(.2,zoom/1.2);applyZoom();}
+    if(t.id==='zfit'){const svg=$('#gwrap svg');if(svg){zoom=Math.min(1,($('#gwrap').clientWidth-4)/+svg.dataset.w);applyZoom();}}
+    if(t.id==='scOpen'||t.id==='scClose')document.querySelectorAll('details.sc:not(.hidden)').forEach(d=>d.open=t.id==='scOpen');
+  });
+
+  $('#expMd').onclick=()=>download(fileBase()+'_documentation.md',buildMarkdown(false),'text/markdown');
+  $('#expHtml').onclick=showPicker;
+  $('#bkNotes').onclick=exportNotes;
+  $('#rsNotes').onclick=$('#impNotes0').onclick=()=>$('#notesIn').click();
+  $('#notesIn').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)readImport(f);};
+  $('#imp').addEventListener('click',e=>{if(pickClick(e))return;const b=e.target.closest('[data-imp]');if(b){if(b.dataset.imp==='cancel')closeImport();else applyImport(b.dataset.imp);}else if(e.target.id==='imp'){closeImport();closePicker();}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#imp').classList.contains('hidden')){closeImport();closePicker();}});
+  document.addEventListener('change',e=>{if(e.target.classList.contains('themeSel')){try{localStorage.setItem(TKEY,e.target.value);}catch(err){}applyTheme(e.target.value);}});
+  if(window.matchMedia)try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>applyTheme());}catch(e){}
+  setInterval(()=>{if(document.visibilityState==='visible'&&phaseNow()!==themePhase)applyTheme();},60000);
+  $('#expInt').onclick=exportInteractive;
+  applyTheme();
+  if(READONLY)bootEmbedded();else checkStorage();
+}
+</script>
+</body>
+</html>
