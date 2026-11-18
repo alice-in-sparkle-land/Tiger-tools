@@ -19,7 +19,12 @@ How it works
      the script's own folder decides view vs af_mon.<table> (partitioned by "C").
   4. Prints every step. Stops at the first failure and says where.
 """
-import os, re, time, glob, traceback
+import os, re, sys, time, glob, traceback
+try:
+    from sql_errors import query_context          # on the server: copied next to this file
+except ImportError:                               # in the repo: python/common/
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'common'))
+    from sql_errors import query_context
 
 # ----------------------------------------------------------------------------
 # reading folders
@@ -364,12 +369,8 @@ def rerun_table(table, master_path, sql_var, folder=None, dry_run=False,
             more = msg.splitlines()[1:8]
             for l in more:
                 say('          ' + l[:300])
-            m = re.search(r'line (\d+),? pos (\d+)', msg)
-            if m:
-                ln = int(m.group(1)); lines = sql.splitlines()
-                say(f"  query near line {ln} (after sql_var replacement):")
-                for k in range(max(1, ln - 2), min(len(lines), ln + 2) + 1):
-                    say(f"    {'>' if k == ln else ' '} {k:>4} | {lines[k - 1][:200]}")
+            for l in query_context(sql, msg):
+                say(l)
             if i < len(plan):
                 say(f"  not run: {', '.join(q['table'] for q in plan[i:])}")
             say('#' * 90)

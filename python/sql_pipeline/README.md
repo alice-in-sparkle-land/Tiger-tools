@@ -2,6 +2,8 @@
 
 Python helpers that run on the server, next to `sachGiaoKhoa.py`.
 
+Copy [`../common/sql_errors.py`](../common/) next to them too: `rerun_table.py` imports it to show the failing query lines.
+
 ## rerun_table.py
 
 Re-runs one table and everything upstream of it, for debugging.
