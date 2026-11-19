@@ -762,6 +762,9 @@ font-weight:600;cursor:pointer}.sc.on{background:var(--fg);color:var(--bg);borde
 .srcl{display:inline-block;font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--bd);color:var(--mut)}
 .warn{background:var(--upbg);border-color:var(--up);color:var(--up)}.warn div{font-size:11px;font-family:monospace}
 h2 .srcl{margin-left:8px;vertical-align:middle;font-weight:500}
+.amtf{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:10px;font-size:12px}
+.amtf label{font-weight:600}.amtf input{width:90px;font:inherit;padding:4px 8px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--fg)}
+.amtf .sub{margin:0}
 /* drill-down: categorical slots 1-6 of the validated reference palette */
 :root{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#e34948}
 @media (prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#0ca30c;--s7:#9085e9;--s8:#e66767}}
@@ -803,7 +806,8 @@ background:var(--bg);color:var(--mut);font-size:11px;font-variant-numeric:tabula
 .mh{flex-wrap:wrap}.mh>div:first-child{order:0;flex:1 1 calc(100% - 48px)}.mh .x{order:1}.mh .seg,.mh #mEx{order:2}}
 </style></head><body>
 <header><h1 id="ttl"></h1>
-<div class="sub" id="sub"></div></header>
+<div class="sub" id="sub"></div>
+<div class="amtf"><label for="fAmt">Min observed amount</label><input id="fAmt" type="number" min="0" step="any" inputmode="decimal" placeholder="0"><span>mil</span><button class="lnk" id="fAmtX" type="button" hidden>clear</button><span class="sub" id="amtNote"></span></div></header>
 <nav class="tabs"><button class="tab on" data-t="top">Top changes</button><button class="tab" data-t="all">All changes</button><button class="tab" data-t="ex" id="exTab">Explore</button></nav>
 <main>
 <section class="pane on" id="top"></section>
@@ -898,8 +902,12 @@ const table = (rows, pre) => { const p = pre||[];
 
 // ---------- Top tab ----------
 let TOPSRC = '__all';
-const SPIKES = D.rows.filter(r=>r.direction==='spike');
+// observed-amount filter for Top / All changes (a row = one value in one period; its own observed amount)
+let MINAMT = 0, SPIKES = [];
+const amtOk = r => !MINAMT || (r.obs_amt || 0) >= MINAMT;
 function renderTop(){
+  const RW = D.rows.filter(amtOk);
+  SPIKES = RW.filter(r=>r.direction==='spike');
   const el = document.getElementById('top');
   const srcs = TOPSRC==='__all' ? M.sources : [SRC[TOPSRC]];
   let h = '';
@@ -925,7 +933,7 @@ function renderTop(){
   h += '</tbody></table></div></div>';
 
   if(TOPSRC==='__all'){
-    const n = M.top_n*2, drops = D.rows.filter(r=>r.direction==='drop');
+    const n = M.top_n*2, drops = RW.filter(r=>r.direction==='drop');
     h += `<div class="card"><h2>Top spikes across all sources</h2>`+
       (SPIKES.length ? table(SPIKES.slice(0,n), ['source','column_name','date_name']) +
         (SPIKES.length>n ? `<details><summary>${SPIKES.length-n} more spikes</summary>${table(SPIKES.slice(n), ['source','column_name','date_name'])}</details>` : '')
@@ -939,7 +947,7 @@ function renderTop(){
   S.cols.forEach(c=>{
     h += `<div class="card"><h2>${esc(c)}<span class="srcl">${esc(S.label)}</span></h2>`;
     M.grans.forEach(g=>{
-      const blk = D.rows.filter(r=>r.source===S.name&&r.column_name===c&&r.date_name===g);
+      const blk = RW.filter(r=>r.source===S.name&&r.column_name===c&&r.date_name===g);
       const sp = blk.filter(r=>r.direction==='spike');
       const dr = blk.filter(r=>r.direction==='drop');
       h += `<h3>${g}<span class="badge">${sp.length}</span></h3>`;
@@ -958,7 +966,7 @@ let sortK='ord', sortD=1;
 function fill(id, vals){ const s=document.getElementById(id); vals.forEach(v=>s.insertAdjacentHTML('beforeend',`<option>${esc(v)}</option>`)); }
 function renderAll(){
   const sr=fSrc.value,g=fG.value,c=fC.value,d=fD.value,l=fL.value,z=parseFloat(fZ.value)||0,q=fS.value.trim().toLowerCase();
-  let rows = D.rows.filter(r=>(!sr||r.source===sr)&&(!g||r.date_name===g)&&(!c||r.column_name===c)&&
+  let rows = D.rows.filter(r=>amtOk(r)&&(!sr||r.source===sr)&&(!g||r.date_name===g)&&(!c||r.column_name===c)&&
     (!d||(d==='none'?!r.direction:r.direction===d))&&(!l||String(r.lag)===l)&&
     (Math.max(Math.abs(r.z_ratio??0),Math.abs(r.z_cl??0))>=z)&&
     (!q||String(r.column_value).toLowerCase().includes(q)));
@@ -1405,7 +1413,23 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
 M.sources.forEach(s=>fSrc.insertAdjacentHTML('beforeend',`<option value="${esc(s.name)}">${esc(s.label)}</option>`));
 fill('fG',M.grans); fill('fC',[...new Set(M.sources.flatMap(s=>s.cols))]); fill('fL',[...Array(M.n_recent)].map((_,i)=>i+1));
 ['fSrc','fG','fC','fD','fL','fZ','fS'].forEach(id=>document.getElementById(id).addEventListener('input',renderAll));
-renderTop(); renderAll();
+// min observed amount box: live filter, remembered in this browser
+function setMinAmt(mil, save){
+  const v = parseFloat(mil);
+  MINAMT = isFinite(v) && v > 0 ? v * 1e6 : 0;
+  const flagged = D.rows.filter(r=>r.direction), kept = flagged.filter(amtOk);
+  document.getElementById('amtNote').textContent = MINAMT
+    ? `showing ${kept.length} of ${flagged.length} flagged rows (periods with observed amount ≥ ${fA(MINAMT)})` : '';
+  document.getElementById('fAmtX').hidden = !MINAMT;
+  if(save){ try{ localStorage.setItem('rrm_min_amt_mil', MINAMT ? String(v) : ''); }catch(e){} }
+  renderTop(); renderAll();
+}
+{ const inp = document.getElementById('fAmt'); let saved = '';
+  try{ saved = localStorage.getItem('rrm_min_amt_mil') || ''; }catch(e){}
+  inp.value = saved;
+  inp.addEventListener('input', () => setMinAmt(inp.value, true));
+  document.getElementById('fAmtX').onclick = () => { inp.value = ''; setMinAmt('', true); };
+  setMinAmt(saved, false); }
 </script></body></html>
 """
 

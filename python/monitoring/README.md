@@ -59,6 +59,8 @@ r = run_risk_ratio_monitor(SOURCES, out, sql_var=sql_var)
 - **Thin periods.** A period counts only when `obs ≥ 4` or `observed amount > 5M` (`min_obs`, `min_amt`). Thin periods show as gaps and are never flagged. Values that never pass are skipped.
 - **Spark work:** one pass per granularity for all segment columns together (they are unpivoted), one for the column pairs, one for the top clients, and one GROUPING SETS cube for Explore.
 
+**Min observed amount (mil)**, at the top of the report, hides rows whose period has less observed amount than you type. It applies to Top changes and All changes, including the spike counts and the source chips. It filters live, with no re-run, and is remembered in your browser. **clear** shows everything again. The drill-down and Explore are not filtered.
+
 **In the report**, click a value to see:
 
 - its weekly and monthly charts, with the baseline and ±2σ lines;
@@ -135,7 +137,7 @@ send_report(r, to=['team@company.com'], smtp_host='smtp.company.com', smtp_user=
 
 ```bash
 python python/monitoring/tests/test_change_monitor.py       # 36 checks, fake Spark
-python python/monitoring/tests/test_risk_ratio_monitor.py   # 43 checks; Part B needs pyspark + java
+python python/monitoring/tests/test_risk_ratio_monitor.py   # 46 checks; Part B needs pyspark + java
 python python/monitoring/tests/test_send_report_email.py    # 20 checks, fake SMTP
 ```
 
@@ -147,4 +149,4 @@ They also pass on Python 3.9, pandas 1.5 and PySpark 3.5.
   - **Part B** runs the full pipeline on a local Spark and checks it gives **identical** counts, distinct clients, flags, drill-downs, top clients and Explore cells.
   - It also checks a stop in the data SQL (with the query line), a skipped step, and the Explore size cap.
 - **send_report_email** is tested with a fake SMTP: the zip round-trip, the html attachment, SSL vs STARTTLS, the password from the environment, a dry run, login and STARTTLS failures, and refused recipients.
-- With Playwright installed, the reports are also opened in Chromium at 1280px and 360px. There must be no JS errors and no sideways scrolling, the click-through and Explore links must work, and on a phone the charts must open on the newest periods.
+- With Playwright installed, the reports are also opened in Chromium at 1280px and 360px. There must be no JS errors and no sideways scrolling, the click-through and Explore links and the amount filter must work, and on a phone the charts must open on the newest periods.

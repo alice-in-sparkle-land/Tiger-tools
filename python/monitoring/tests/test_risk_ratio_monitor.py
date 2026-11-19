@@ -312,6 +312,30 @@ else:
             exs = pg.inner_text('#exS')
             wide = pg.evaluate('document.documentElement.scrollWidth > window.innerWidth')
             pg.screenshot(path=os.path.join(TMP, f'risk_{w}.png'))
+            if w == 1280:
+                pg.goto('file://' + rep_path)
+                pg.evaluate("try{localStorage.removeItem('rrm_min_amt_mil')}catch(e){}")
+                pg.reload()
+                pg.click('button[data-t=all]')
+                n0 = pg.locator('#tAll tbody tr').count()
+                amts = pg.evaluate("D.rows.map(r=>r.obs_amt||0).sort((a,b)=>a-b)")
+                cut = amts[len(amts) // 2] / 1e6                       # median row amount, in mil
+                pg.fill('#fAmt', f'{cut:.3f}')
+                pg.wait_for_timeout(150)
+                n1 = pg.locator('#tAll tbody tr').count()
+                expect = pg.evaluate(f"D.rows.filter(r=>(r.obs_amt||0) >= {cut:.3f}*1e6).length")
+                note = pg.inner_text('#amtNote')
+                pg.reload(); pg.wait_for_timeout(150)
+                kept = pg.input_value('#fAmt'); pg.click('button[data-t=all]'); n2 = pg.locator('#tAll tbody tr').count()
+                pg.click('#fAmtX'); pg.wait_for_timeout(100); n3 = pg.locator('#tAll tbody tr').count()
+                ok('amount filter: hides rows under the minimum (All tab), note says how many are shown',
+                   n1 == expect and 0 < n1 < n0 and 'showing' in note, (n0, n1, expect, note))
+                ok('amount filter: remembered after reload, clear restores all rows',
+                   kept == f'{cut:.3f}' and n2 == n1 and n3 == n0 and pg.inner_text('#amtNote') == '', (kept, n2, n3))
+                pg.fill('#fAmt', '999999'); pg.wait_for_timeout(100)
+                ok('amount filter: very high minimum -> Top tab shows no spikes, no errors',
+                   pg.evaluate("SPIKES.length") == 0 and not errs)
+                pg.click('#fAmtX')
             ok(f'browser {w}px: no JS errors, drill + clients on click, Explore link, no sideways scroll',
                not errs and n_drill == 2 and n_client == 1 and 'a = web' in exs and not wide,
                (errs[:1], n_drill, n_client, exs, wide))
