@@ -8,7 +8,7 @@ Python tools that run on the server and produce **one offline HTML report** that
 | `risk_ratio_monitor.py` | A default ratio (e.g. fpd30) by segment, **by loans and by distinct clients**, by week and month. Adds a drill-down, top clients and an Explore tab. |
 | `send_report_email.py` | Emails either report: a summary table in the body, and the report zipped as an attachment. |
 
-**On the server**, copy these files next to `sachGiaoKhoa.py`, together with [`../common/sql_errors.py`](../common/). Spark, `replace_sql_var` and `date_fm` come from `sachGiaoKhoa` unless you pass them in.
+**On the server**, copy these files next to `sachGiaoKhoa.py`. Each file stands alone: it imports only standard Python, pandas, numpy, PySpark and `sachGiaoKhoa`, so there is nothing else to install or copy. Spark, `replace_sql_var` and `date_fm` come from `sachGiaoKhoa` unless you pass them in.
 
 ## How a value gets flagged (both monitors)
 
