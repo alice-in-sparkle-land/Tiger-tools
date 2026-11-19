@@ -69,9 +69,8 @@ ok('html: offline (no http/https references)', not re.search(r'(src|href)=["\']h
 # ---------------- failures ----------------
 r, log, _ = run(fail_on='product_source')
 ok('stop_on_error: stops and reports', not r['ok'] and r['failed_step'] == 2 and r['failed_query'][2] == 'product_source')
-ok('stop_on_error: block shows source, granularity, engine, error',
-   'FAILED at query 2/15' in log and 'granularity' in log and 'Spark SQL' in log and 'UNRESOLVED_COLUMN' in log)
-ok('stop_on_error: shows the query line from "line 4 pos 22"', 'query near line 4' in log and '>    4 |' in log)
+ok('stop_on_error: one line with query, source / granularity / column and error',
+   'FAILED at query 2/15: bnpl_txn / daily / product_source: ' in log and 'UNRESOLVED_COLUMN' in log, log[-400:])
 ok('stop_on_error: lists what did not run', 'not run: bnpl_txn/daily/transaction_status' in log)
 r, log, _ = run(fail_on='product_source', stop_on_error=False, out_path=os.path.join(TMP, 'r2.html'))
 ok('stop_on_error=False: report still written, failures listed', r['ok'] and len(r['failed']) == 3

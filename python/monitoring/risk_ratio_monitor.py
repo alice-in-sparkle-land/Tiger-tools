@@ -19,44 +19,10 @@ What it does
      (GROUPING SETS), small combinations dropped so the file stays small.
   5. Writes one offline HTML file. Prints every step; stops at the first failed step and says where.
 """
-import os, re, json, time, hashlib
+import os, json, time, hashlib
 from itertools import combinations
 import numpy as np
 import pandas as pd
-
-# ----------------------------------------------------------------------------
-# failure printout (kept in this file: no extra module to copy to the server)
-# ----------------------------------------------------------------------------
-def _query_context(sql, msg, around=2, width=200):
-    """The query lines around Spark's 'line N pos M', arrow on line N; [] when there is no line."""
-    m = re.search(r'line (\d+),? pos (\d+)', msg or '')
-    if not m or not sql:
-        return []
-    ln, lines = int(m.group(1)), sql.splitlines()
-    if not 1 <= ln <= len(lines):
-        return []
-    out = [f"  query near line {ln} (after sql_var replacement):"]
-    for k in range(max(1, ln - around), min(len(lines), ln + around) + 1):
-        out.append(f"    {'>' if k == ln else ' '} {k:>4} | {lines[k - 1][:width]}")
-    return out
-
-
-def failure_block(title, where, msg, sql=None, not_run=None, err_type=None):
-    """The '####' block printed when a run stops: what failed, where, the error, the query lines, what did not run."""
-    msg = (msg or '').strip()
-    width = max([len(k) for k in where] + [5])
-    out = ['', '#' * 90, f"FAILED at {title}"]
-    for k, v in where.items():
-        out.append(f"  {k.ljust(width)}: {v}")
-    first = msg.splitlines()[0][:500] if msg else (err_type or 'unknown error')
-    out.append(f"  {'error'.ljust(width)}: {first}")
-    for l in msg.splitlines()[1:8]:
-        out.append(' ' * (width + 4) + l[:300])
-    out += _query_context(sql, msg)
-    if not_run:
-        out.append(f"  not run: {', '.join(not_run)}")
-    out.append('#' * 90)
-    return out
 
 # ----------------------------------------------------------------------------
 # settings
@@ -623,14 +589,11 @@ def run_risk_ratio_monitor(sources, out_path='risk_ratio_monitor.html', spark=No
 
     def fail(i, kind, src, g, e, essential):
         msg = str(e).strip()
-        q = data_sql(src)
         if stop_on_error or essential:
             rest = [label(*s) for s in (plan + after)[i:i + 10]]
-            for l in failure_block(f"step {i}/{n_steps}: {label(kind, src, g)}",
-                                   {'source': src['name'], 'step': kind, 'granularity': g or '-', 'engine': 'Spark'},
-                                   msg, sql=q if isinstance(q, str) else None, err_type=type(e).__name__,
-                                   not_run=rest + (['...'] if n_steps - i > 10 else [])):
-                log(l)
+            first = msg.splitlines()[0][:500] if msg else type(e).__name__
+            log(f"\nFAILED at step {i}/{n_steps}: {label(kind, src, g)} · source {src['name']} · {g or '-'}: {first}")
+            log(f"  not run: {', '.join(rest + (['...'] if n_steps - i > 10 else []))}")
             result.update(failed_step=i, failed_at=label(kind, src, g), error=msg)
             return True
         result['failed'].append(f"{label(kind, src, g)}: {msg.splitlines()[0][:200] if msg else type(e).__name__}")

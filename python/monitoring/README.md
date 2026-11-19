@@ -102,22 +102,11 @@ change_monitor: 1 source(s), 6 queries, granularities daily, weekly, monthly
   written: /dbfs/FileStore/change_monitor.html (0.2 MB)
 ```
 
-When a query fails:
+When a query fails, it stops and prints one line with the query, where it was and the first line of the error, then what did not run:
 
 ```
-##########################################################################################
-FAILED at query 2/6
-  source     : bnpl_txn
-  granularity: daily
-  column     : transaction_status
-  engine     : Spark SQL
-  error      : [UNRESOLVED_COLUMN] A column `transaction_status` cannot be resolved.; line 4 pos 22
-  query near line 4 (after sql_var replacement):
-         3 |  , 'transaction_status'                                as column_name
-    >    4 |  , date_trunc('day', from_utc_timestamp(cast(dtime_create_transaction as timestamp), ...
-         5 |  , coalesce(cast(transaction_status as string), '(null)')   as column_value
+FAILED at query 2/6: bnpl_txn / daily / transaction_status: [UNRESOLVED_COLUMN] A column `transaction_status` cannot be resolved.; line 4 pos 22
   not run: bnpl_txn/weekly/transaction_source, bnpl_txn/weekly/transaction_status, ...
-##########################################################################################
 ```
 
 ## send_report_email.py
@@ -139,16 +128,16 @@ send_report(r, to=['team@company.com'], smtp_host='smtp.company.com', smtp_user=
 
 ```bash
 python python/monitoring/tests/test_change_monitor.py       # 36 checks, fake Spark
-python python/monitoring/tests/test_risk_ratio_monitor.py   # 51 checks; Part B needs pyspark + java
+python python/monitoring/tests/test_risk_ratio_monitor.py   # 50 checks; Part B needs pyspark + java
 python python/monitoring/tests/test_send_report_email.py    # 20 checks, fake SMTP
 ```
 
 They also pass on Python 3.9, pandas 1.5 and PySpark 3.5.
 
-- **change_monitor** is tested with a fake Spark: planted spikes, drops and NEW values, the incomplete-period cut, a stop with the query line, `stop_on_error=False`, bad input and settings.
+- **change_monitor** is tested with a fake Spark: planted spikes, drops and NEW values, the incomplete-period cut, a stop at the first failed query, `stop_on_error=False`, bad input and settings.
 - **risk_ratio_monitor:**
   - **Part A** runs the scoring, drill-down, top clients and Explore on aggregates rebuilt in plain pandas.
   - **Part B** runs the full pipeline on a local Spark and checks it gives **identical** counts, distinct clients, flags, drill-downs, top clients and Explore cells.
-  - It also checks a stop in the data SQL (with the query line), a skipped step, and the Explore size cap.
+  - It also checks a stop in the data SQL, a skipped step, and the Explore size cap.
 - **send_report_email** is tested with a fake SMTP: the zip round-trip, the html attachment, SSL vs STARTTLS, the password from the environment, a dry run, login and STARTTLS failures, and refused recipients.
 - With Playwright installed, the reports are also opened in Chromium at 1280px and 360px. There must be no JS errors and no sideways scrolling, the click-through and Explore links and the amount filter must work, and on a phone the charts must open on the newest periods.

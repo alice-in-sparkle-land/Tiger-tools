@@ -19,43 +19,9 @@ The SQL template of a source must output date_name, column_name, date_value, col
 cnt_all, group by 1,2,3,4 and use these placeholders:
   var_date_name, column_name_var, date_var, column_var, timeframe_var
 """
-import os, re, json, time
+import os, json, time
 import numpy as np
 import pandas as pd
-
-# ----------------------------------------------------------------------------
-# failure printout (kept in this file: no extra module to copy to the server)
-# ----------------------------------------------------------------------------
-def _query_context(sql, msg, around=2, width=200):
-    """The query lines around Spark's 'line N pos M', arrow on line N; [] when there is no line."""
-    m = re.search(r'line (\d+),? pos (\d+)', msg or '')
-    if not m or not sql:
-        return []
-    ln, lines = int(m.group(1)), sql.splitlines()
-    if not 1 <= ln <= len(lines):
-        return []
-    out = [f"  query near line {ln} (after sql_var replacement):"]
-    for k in range(max(1, ln - around), min(len(lines), ln + around) + 1):
-        out.append(f"    {'>' if k == ln else ' '} {k:>4} | {lines[k - 1][:width]}")
-    return out
-
-
-def failure_block(title, where, msg, sql=None, not_run=None, err_type=None):
-    """The '####' block printed when a run stops: what failed, where, the error, the query lines, what did not run."""
-    msg = (msg or '').strip()
-    width = max([len(k) for k in where] + [5])
-    out = ['', '#' * 90, f"FAILED at {title}"]
-    for k, v in where.items():
-        out.append(f"  {k.ljust(width)}: {v}")
-    first = msg.splitlines()[0][:500] if msg else (err_type or 'unknown error')
-    out.append(f"  {'error'.ljust(width)}: {first}")
-    for l in msg.splitlines()[1:8]:
-        out.append(' ' * (width + 4) + l[:300])
-    out += _query_context(sql, msg)
-    if not_run:
-        out.append(f"  not run: {', '.join(not_run)}")
-    out.append('#' * 90)
-    return out
 
 # ----------------------------------------------------------------------------
 # settings
@@ -343,12 +309,10 @@ def run_change_monitor(sources, out_path='change_monitor.html', spark=None, date
         except Exception as e:
             msg = str(e).strip()
             if stop_on_error:
-                for l in failure_block(f"query {i}/{len(queries)}",
-                                       {'source': s, 'granularity': g, 'column': c, 'engine': 'Spark SQL'},
-                                       msg, sql=q, err_type=type(e).__name__,
-                                       not_run=[f"{a}/{b}/{x}" for a, b, x, _ in queries[i:i + 12]]
-                                       + (['...'] if len(queries) - i > 12 else [])):
-                    log(l)
+                first = msg.splitlines()[0][:500] if msg else type(e).__name__
+                log(f"\nFAILED at query {i}/{len(queries)}: {s} / {g} / {c}: {first}")
+                rest = [f"{a}/{b}/{x}" for a, b, x, _ in queries[i:i + 12]] + (['...'] if len(queries) - i > 12 else [])
+                log(f"  not run: {', '.join(rest)}")
                 result.update(failed_step=i, failed_query=(s, g, c), error=msg, query=q)
                 return result
             result['failed'].append(f"{s}/{g}/{c}: {msg.splitlines()[0][:200] if msg else type(e).__name__}")

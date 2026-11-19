@@ -247,14 +247,14 @@ else:
         ok('spark run: explore cells identical',
            Ds['explore']['pd30']['grans']['weekly']['cells'] == json.loads(json.dumps(G['cells'])))
 
-    # failure in the data SQL: stops at step 1 with the query line
+    # failure in the data SQL: stops at step 1
     buf = []
     bad = dict(RISK_SOURCE, data="select *\nfrom loans_tbl\nwhere no_such_column = 1")
     r = rm.run_risk_ratio_monitor([bad], os.path.join(TMP, 'bad.html'), spark=spark, now=NOW, log=buf.append)
     out = '\n'.join(buf)
-    ok('failure: stops at step 1 with source, step, engine and error',
-       not r['ok'] and r['failed_step'] == 1 and 'FAILED at step 1/' in out and 'no_such_column' in out, out[-400:])
-    ok('failure: shows the query line', 'query near line 3' in out and '>    3 | where no_such_column' in out, out[-500:])
+    ok('failure: stops at step 1, one line with step, source, granularity and error',
+       not r['ok'] and r['failed_step'] == 1 and 'FAILED at step 1/' in out and 'source pd30 · weekly: ' in out
+       and 'no_such_column' in out, out[-400:])
     ok('failure: lists the steps that did not run', 'not run: pairs pd30/weekly' in out)
 
     # a non-essential step failing with stop_on_error=False: report still written, failure listed
