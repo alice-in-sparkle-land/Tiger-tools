@@ -69,6 +69,8 @@ r = run_risk_ratio_monitor(SOURCES, out, sql_var=sql_var)
 
 **The Explore tab** lets you pick any sample, one value or All per column. It shows fpd30 by loans and by clients as lines, and observed amount as grey bars in a panel below on the same time axis. It also has tiles, a data table and a CSV download. Distinct clients are exact for every filter, because the cube is computed with GROUPING SETS and not added up from smaller groups. So it's **one value or All per column**, not several values at once.
 
+**Split by** (Explore) draws one line per value of any Explore column, inside the current filters: the **top 5 by loans** in the shown periods, plus **Others** for the rest, with the whole sample as a dashed line. A **Loan ratio / Client ratio** switch picks the metric. The split column's own filter is set to All while the split is on. Others is the sample minus the top 5, so it also holds `(other)` and dropped small values. It is exact by loans, but distinct clients can't be subtracted, so **Others is not shown by clients**. The data table and CSV get one row per period per line. It runs in the browser, so the file doesn't grow.
+
 **Keeping the file small:** each column keeps its top `explore_max_val` (10) values, and the rest go into `(other)`. Combinations with fewer than `explore_min_loans` (200) loans are dropped in Spark. If the cube is still over `explore_max_rows` (400,000) rows, the minimum doubles until it fits. To keep more detail, filter on fewer columns: `explore_cols=['a', 'b']`.
 
 ## Options (both monitors)

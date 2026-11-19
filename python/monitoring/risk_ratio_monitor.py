@@ -1287,7 +1287,8 @@ document.querySelectorAll('#mSeg button').forEach(b => b.onclick = () => { METRI
 
 // ---------- Explore tab: any sample -> trend of loan ratio, client ratio, observed amount ----------
 const EXD = D.explore || {};
-const EX = {src: Object.keys(EXD)[0], g: null, sel: {}, range: 'all'};
+const EX = {src: Object.keys(EXD)[0], g: null, sel: {}, range: 'all', split: null, m: 'r'};
+const EX_TOP = 5;   // split: top values by loans get a line, the rest go to Others
 function exG(){ const S = EXD[EX.src]; return S && S.grans[EX.g]; }
 function exControls(){
   const S = EXD[EX.src]; if(!S){ document.getElementById('exF').innerHTML = '<div class="empty">Explore data not built (EXPLORE = False).</div>'; return; }
@@ -1295,10 +1296,14 @@ function exControls(){
   const G = exG();
   let h = '';
   if(Object.keys(EXD).length > 1) h += `<label>Source<select id="exSrc">${Object.keys(EXD).map(n=>`<option value="${esc(n)}" ${n===EX.src?'selected':''}>${esc(sLbl(n))}</option>`).join('')}</select></label>`;
+  if(EX.split && !S.cols.includes(EX.split)) EX.split = null;
   S.cols.forEach((c,i)=>{
-    h += `<label>${esc(c)}<select data-ci="${i}"><option value="-1">All</option>`+
+    const sp = c===EX.split;
+    h += `<label>${esc(c)}<select data-ci="${i}" ${sp?'disabled title="split by this column"':''}><option value="-1">${sp?'All (split)':'All'}</option>`+
       G.vals[i].map((v,vi)=>`<option value="${vi}" ${EX.sel[c]===v?'selected':''}>${esc(v)}</option>`).join('')+`</select></label>`;
   });
+  h += `<label>Split by<select id="exSp"><option value="">none</option>${S.cols.map(c=>`<option value="${esc(c)}" ${c===EX.split?'selected':''}>${esc(c)}</option>`).join('')}</select></label>`;
+  if(EX.split) h += `<div class="seg" id="exM">${[['r','Loan ratio'],['rc','Client ratio']].map(([m,l])=>`<button data-m="${m}" class="${m===EX.m?'on':''}">${l}</button>`).join('')}</div>`;
   h += `<label>Show<select id="exR">${[['all','All periods'],['52','Last 52'],['26','Last 26'],['12','Last 12']].map(([v,l])=>`<option value="${v}" ${EX.range===v?'selected':''}>${l}</option>`).join('')}</select></label>`;
   h += `<div class="seg" id="exSeg">${gs.map(g=>`<button data-g="${g}" class="${g===EX.g?'on':''}">${g}</button>`).join('')}</div>`;
   h += `<button class="lnk" id="exReset" type="button" style="align-self:flex-end;margin-bottom:6px">reset</button>`;
@@ -1308,29 +1313,53 @@ function exControls(){
     if(s.value==='-1') delete EX.sel[c]; else EX.sel[c] = G.vals[+s.dataset.ci][+s.value]; exRender(); });
   const sr = document.getElementById('exSrc'); if(sr) sr.onchange = ()=>{ EX.src = sr.value; EX.sel = {}; exControls(); exRender(); };
   document.getElementById('exR').onchange = e => { EX.range = e.target.value; exRender(); };
+  document.getElementById('exSp').onchange = e => { EX.split = e.target.value || null; if(EX.split) delete EX.sel[EX.split]; exControls(); exRender(); };
+  f.querySelectorAll('#exM button').forEach(b=>b.onclick=()=>{ EX.m = b.dataset.m; exControls(); exRender(); });
   f.querySelectorAll('#exSeg button').forEach(b=>b.onclick=()=>{ EX.g = b.dataset.g; exControls(); exRender(); });
-  document.getElementById('exReset').onclick = ()=>{ EX.sel = {}; EX.range = 'all'; exControls(); exRender(); };
+  document.getElementById('exReset').onclick = ()=>{ EX.sel = {}; EX.range = 'all'; EX.split = null; exControls(); exRender(); };
 }
 function exKey(){
   const S = EXD[EX.src], G = exG();
   return S.cols.map((c,i)=>{ if(!(c in EX.sel)) return -1; const vi = G.vals[i].indexOf(EX.sel[c]); return vi<0 ? -1 : vi; }).join(',');
 }
 function exKeyMissing(){ return !exG().cells[exKey()]; }
-function exSeries(){
-  const S = EXD[EX.src], G = exG(), n = G.p.length;
-  const missing = [];
-  const key = S.cols.map((c,i)=>{ if(!(c in EX.sel)) return -1; const vi = G.vals[i].indexOf(EX.sel[c]); if(vi<0) missing.push(c); return vi<0 ? -1 : vi; }).join(',');
+function exRatios(r){ r.thin = !(r.o >= M.min_obs || r.a > M.min_amt);
+  r.r = r.o>0 && !r.thin ? r.d/r.o : null; r.rc = r.oc!=null && r.oc>0 && !r.thin ? r.dc/r.oc : null; return r; }
+function exRowsOf(key){
+  const G = exG(), n = G.p.length;
   const rows = Array.from({length:n}, (_,i)=>({i, p:G.p[i], mat:G.mat[i], nl:0, o:0, d:0, a:0, oc:0, dc:0}));
   (G.cells[key]||[]).forEach(([pi,nl,o,d,a,oc,dc])=>Object.assign(rows[pi], {nl,o,d,a,oc,dc}));
-  rows.forEach(r=>{ r.thin = !(r.o >= M.min_obs || r.a > M.min_amt);
-    r.r = r.o>0 && !r.thin ? r.d/r.o : null; r.rc = r.oc>0 && !r.thin ? r.dc/r.oc : null; });
+  rows.forEach(exRatios);
   const k = EX.range==='all' ? n : Math.min(n, +EX.range);
-  return {rows: rows.slice(n-k), missing};
+  return rows.slice(n-k);
 }
-function exChart(rows, g){
+function exSeries(){
+  const S = EXD[EX.src], G = exG();
+  const missing = [];
+  const ix = S.cols.map((c,i)=>{ if(!(c in EX.sel)) return -1; const vi = G.vals[i].indexOf(EX.sel[c]); if(vi<0) missing.push(c); return vi<0 ? -1 : vi; });
+  const rows = exRowsOf(ix.join(','));
+  // split: one line per top value of the split column (by loans in the shown periods), the rest summed into Others.
+  // Others = sample minus the top values: exact for loans and amount; distinct clients can't be subtracted, so none.
+  let lines = null;
+  const si = EX.split ? S.cols.indexOf(EX.split) : -1;
+  if(si >= 0){
+    const all = G.vals[si].map((v,vi)=>{ const k = ix.slice(); k[si] = vi; const rs = exRowsOf(k.join(','));
+      return {v, rows: rs, nl: rs.reduce((a,r)=>a+r.nl,0)}; }).filter(o=>o.v!=='(other)' && o.nl>0);
+    all.sort((a,b)=>b.nl-a.nl || (a.v<b.v?-1:1));
+    lines = all.slice(0, EX_TOP).map((o,j)=>Object.assign(o, {j}));
+    const oth = rows.map((r,i)=>{ const t = {i:r.i, p:r.p, mat:r.mat, oc:null, dc:null};
+      ['nl','o','d','a'].forEach(f=>{ t[f] = Math.max(0, r[f] - lines.reduce((s,l)=>s+l.rows[i][f],0)); }); return exRatios(t); });
+    const nOth = all.length - lines.length;
+    if(oth.some(r=>r.nl>0)) lines.push({v: 'Others', others: true, nOth, j: EX_TOP, rows: oth, nl: oth.reduce((a,r)=>a+r.nl,0)});
+  }
+  return {rows, missing, lines};
+}
+const exLC = l => l.others ? 'var(--s7)' : `var(--s${l.j+1})`;
+function exChart(rows, g, lines){
   const n = rows.length, W=900, L=58, R=70, T=14, H1=230, GAP=26, H2=110, B=26, H=T+H1+GAP+H2+B;
   const bw = (W-L-R)/Math.max(n,1), x = i => L + bw*(i+.5);
-  const vr = rows.flatMap(r=>[r.r, r.rc]).filter(v=>v!=null);
+  const mk = EX.m, shown = lines ? lines.filter(l=>!(l.others && mk==='rc')) : null;
+  const vr = (shown ? [rows].concat(shown.map(l=>l.rows)).flatMap(rs=>rs.map(r=>r[mk])) : rows.flatMap(r=>[r.r, r.rc])).filter(v=>v!=null);
   const nice = m => { const st=m/4, mg=Math.pow(10,Math.floor(Math.log10(st||1e-9))), f=st/mg; return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*mg*4; };
   const ymax = nice(Math.max(...vr, 1e-4)*1.08), amax = nice(Math.max(...rows.map(r=>r.a), 1)*1.05);
   const y = v => T + (1 - v/ymax)*H1, ya = v => T+H1+GAP + (1 - v/amax)*H2, yb = T+H1+GAP+H2;
@@ -1350,14 +1379,25 @@ function exChart(rows, g){
   // lines (gaps where the period is thin)
   const solid = k => rows.map(r=>r.mat ? r[k] : null);
   const dash  = k => rows.map((r,i)=>(!r.mat || (rows[i+1] && !rows[i+1].mat)) ? r[k] : null);   // overlap one point to join
-  h += segs(solid('r'), x, y, 'lr') + segs(solid('rc'), x, y, 'lc');
-  h += `<g style="stroke-dasharray:4 4;opacity:.6">${segs(dash('r'), x, y, 'lr') + segs(dash('rc'), x, y, 'lc')}</g>`;
-  // direct labels at the last point of each line
-  const last = k => { for(let i=n-1;i>=0;i--) if(rows[i][k]!=null && rows[i].mat) return i; return -1; };
-  const lr = last('r'), lc = last('rc');
-  const ly = []; if(lr>=0) ly.push({k:'Loan', i:lr, v:rows[lr].r}); if(lc>=0) ly.push({k:'Client', i:lc, v:rows[lc].rc});
+  const last = (rs, k) => { for(let i=n-1;i>=0;i--) if(rs[i][k]!=null && rs[i].mat) return i; return -1; };
+  const ly = [];
+  if(shown){
+    // whole sample dashed grey; one solid line per split value, immature part faded
+    const sv = (rs, imm) => rs.map((r,i)=>(imm ? (!r.mat || (rs[i+1] && !rs[i+1].mat)) : r.mat) ? r[mk] : null);
+    h += segs(sv(rows,false), x, y, 'par');
+    shown.forEach(l=>{ const c = exLC(l);
+      h += `<g style="stroke:${c};fill:${c}">${segs(sv(l.rows,false), x, y, 'kid')}</g>`+
+           `<g style="stroke:${c};fill:${c};stroke-dasharray:4 4;opacity:.5">${segs(sv(l.rows,true), x, y, 'kid')}</g>`;
+      const li = last(l.rows, mk); if(li>=0) ly.push({k: l.v, i: li, v: l.rows[li][mk]}); });
+  } else {
+    h += segs(solid('r'), x, y, 'lr') + segs(solid('rc'), x, y, 'lc');
+    h += `<g style="stroke-dasharray:4 4;opacity:.6">${segs(dash('r'), x, y, 'lr') + segs(dash('rc'), x, y, 'lc')}</g>`;
+    // direct labels at the last point of each line
+    const lr = last(rows,'r'), lc = last(rows,'rc');
+    if(lr>=0) ly.push({k:'Loan', i:lr, v:rows[lr].r}); if(lc>=0) ly.push({k:'Client', i:lc, v:rows[lc].rc});
+  }
   ly.sort((a,b)=>y(a.v)-y(b.v)); let prev = -99;
-  ly.forEach(o=>{ let yy = Math.max(y(o.v)+4, prev+13); prev = yy; h += `<text class="dl" x="${x(o.i)+8}" y="${yy}">${o.k} ${fmtY(o.v)}</text>`; });
+  ly.forEach(o=>{ let yy = Math.max(y(o.v)+4, prev+13); prev = yy; h += `<text class="dl" x="${x(o.i)+8}" y="${yy}">${esc(String(o.k).length>12 ? String(o.k).slice(0,11)+'…' : o.k)} ${fmtY(o.v)}</text>`; });
   // x ticks
   const nt = Math.min(8, n), step = Math.max(1, Math.round((n-1)/(nt-1||1)));
   for(let i=0;i<n;i+=step){ if(n-1-i < step*0.6 && i!==n-1) continue; h += `<text class="ax" x="${x(i)}" y="${H-8}" text-anchor="middle">${tickLbl(rows[i].p,g)}</text>`; }
@@ -1367,9 +1407,13 @@ function exChart(rows, g){
 }
 function exRender(){
   const S = EXD[EX.src]; if(!S || !exG()) return;
-  const {rows, missing} = exSeries(), g = EX.g;
+  const {rows, missing, lines} = exSeries(), g = EX.g, mk = EX.m;
+  const shown = lines ? lines.filter(l=>!(l.others && mk==='rc')) : null, mName = mk==='r' ? 'fpd30 by loans' : 'fpd30 by clients';
   const desc = S.cols.filter(c=>c in EX.sel).map(c=>`${esc(c)} = <b>${esc(EX.sel[c])}</b>`).join(' · ') || '<b>whole portfolio</b>';
   document.getElementById('exS').innerHTML = `${esc(sLbl(EX.src))} · ${desc}`+
+    (lines ? ` · split by <b>${esc(EX.split)}</b>: top ${EX_TOP} by loans in the shown periods`+
+      (lines.some(l=>l.others) ? `, the other ${lines.find(l=>l.others).nOth ? fN(lines.find(l=>l.others).nOth)+' values and small ones' : 'small values'} in Others` : '')+
+      (lines.some(l=>l.others) && mk==='rc' ? ` <span style="color:var(--mut)">(Others not shown by clients: distinct clients can't be subtracted exactly)</span>` : '') : '')+
     (missing.length ? ` <span style="color:var(--up)">· ${missing.map(esc).join(', ')} value not in the explore list (small values fold into (other)) — showing All for it</span>` : '')+
     (exKeyMissing() ? ` <span style="color:var(--up)">· this combination has fewer than ${fN(exG().min_loans)} loans in the window, so it isn't stored — widen a filter</span>` : '');
   // tiles: latest matured, non-thin period; compare with the average of the shown matured periods
@@ -1382,44 +1426,59 @@ function exRender(){
     tile(`${fN(L1.d)} / ${fN(L1.o)}`, 'defaults / observed loans', `${fN(L1.dc)} / ${fN(L1.oc)} clients`)+
     tile(fA(L1.a), 'observed amount', `${fN(L1.nl)} loans disbursed`)
     : '<div class="empty" style="grid-column:1/-1">No matured period passes the obs / amount rule for this sample.</div>';
-  document.getElementById('exL').innerHTML = `<span><i class="sw" style="background:var(--s1)"></i>fpd30 by loans (def / obs)</span>`+
+  document.getElementById('exL').innerHTML = shown ?
+    `<span><i class="swl"></i>whole sample</span>`+shown.map(l=>`<span><i class="sw" style="background:${exLC(l)}"></i>${esc(l.v)}</span>`).join('')+
+    `<span><i class="sw" style="background:var(--mut);opacity:.5"></i>observed amount, whole sample (lower panel)</span>`+
+    `<span style="color:var(--mut)">${mName} · dashed = not yet mature · gaps = thin periods</span>` :
+    `<span><i class="sw" style="background:var(--s1)"></i>fpd30 by loans (def / obs)</span>`+
     `<span><i class="sw" style="background:var(--s2)"></i>fpd30 by clients (distinct)</span>`+
     `<span><i class="sw" style="background:var(--mut);opacity:.5"></i>observed amount (lower panel)</span>`+
     `<span style="color:var(--mut)">dashed = not yet mature · gaps = thin periods (obs &lt; ${M.min_obs} and amount ≤ ${fA(M.min_amt)})</span>`;
-  const C = document.getElementById('exC'); C.innerHTML = exChart(rows, g); requestAnimationFrame(() => { C.scrollLeft = C.scrollWidth; });
+  const C = document.getElementById('exC'); C.innerHTML = exChart(rows, g, lines); requestAnimationFrame(() => { C.scrollLeft = C.scrollWidth; });
   // hover: one crosshair across both panels
   const svg = C.querySelector('svg'), tip = C.querySelector('.tip'), hv = svg.querySelector('.hv'), hit = svg.querySelector('.hit');
   const vb = svg.viewBox.baseVal, x0 = +hit.getAttribute('x'), wp = +hit.getAttribute('width'), n = rows.length, bw = wp/Math.max(n,1);
   const move = e => { const b = svg.getBoundingClientRect(), sx = (e.clientX-b.left)*vb.width/b.width;
     const i = Math.max(0, Math.min(n-1, Math.floor((sx-x0)/bw))), px = x0 + bw*(i+.5), r = rows[i];
     hv.setAttribute('x1',px); hv.setAttribute('x2',px); hv.style.opacity=.6;
-    tip.innerHTML = `<b>${fullLbl(r.p,g)}</b>${r.mat?'':' <span style="color:var(--mut)">(not yet mature)</span>'}`+
+    const fr = o => o[mk]==null ? 'thin' : fP2(o[mk]), dd = o => `${fN(mk==='r'?o.d:o.dc)} / ${fN(mk==='r'?o.o:o.oc)}`;
+    tip.innerHTML = `<b>${fullLbl(r.p,g)}</b>${r.mat?'':' <span style="color:var(--mut)">(not yet mature)</span>'}`+ (shown ?
+      `<div class="ti"><span><i class="swl"></i>whole sample <span style="color:var(--mut)">${dd(r)}</span></span><b>${fr(r)}</b></div>`+
+      shown.map(l=>({l, o:l.rows[i]})).sort((a,b)=>(b.o[mk]??-1)-(a.o[mk]??-1)).map(({l,o})=>
+        `<div class="ti"><span><i class="sw" style="background:${exLC(l)}"></i>${esc(l.v)} <span style="color:var(--mut)">${dd(o)}</span></span><b>${fr(o)}</b></div>`).join('')+
+      `<div class="ti"><span><i class="sw" style="background:var(--mut);opacity:.5"></i>observed amount</span><b>${fA(r.a)}</b></div>` :
       `<div class="ti"><span><i class="sw" style="background:var(--s1)"></i>fpd30 loans</span><b>${r.r==null?'thin':fP2(r.r)}</b></div>`+
       `<div class="ti"><span><i class="sw" style="background:var(--s2)"></i>fpd30 clients</span><b>${r.rc==null?'thin':fP2(r.rc)}</b></div>`+
       `<div class="ti"><span>defaults / obs loans</span><b>${fN(r.d)} / ${fN(r.o)}</b></div>`+
       `<div class="ti"><span>defaults / obs clients</span><b>${fN(r.dc)} / ${fN(r.oc)}</b></div>`+
-      `<div class="ti"><span><i class="sw" style="background:var(--mut);opacity:.5"></i>observed amount</span><b>${fA(r.a)}</b></div>`;
+      `<div class="ti"><span><i class="sw" style="background:var(--mut);opacity:.5"></i>observed amount</span><b>${fA(r.a)}</b></div>`);
     tip.style.display='block'; const left = px*b.width/vb.width;
     tip.style.left = (left + 14 + tip.offsetWidth > b.width ? left - tip.offsetWidth - 14 : left + 14) + 'px'; tip.style.top = '8px'; };
   hit.addEventListener('pointermove', move); hit.addEventListener('pointerdown', move);
   hit.addEventListener('pointerleave', ()=>{ tip.style.display='none'; hv.style.opacity=0; });
   // data table + CSV
-  const hd = ['Period','Mature','Loans','Obs loans','Defaults','fpd30 loans','Obs clients','Def clients','fpd30 clients','Obs amount'];
-  document.getElementById('exT').innerHTML = `<table class="dt"><thead><tr>${hd.map((t,i)=>`<th class="${i>1?'num':''}">${t}</th>`).join('')}</tr></thead><tbody>`+
-    rows.slice().reverse().map(r=>`<tr><td>${fullLbl(r.p,g)}</td><td>${r.mat?'yes':'no'}</td><td class="num">${fN(r.nl)}</td><td class="num">${fN(r.o)}</td><td class="num">${fN(r.d)}</td>`+
-      `<td class="num">${r.r==null?'thin':fP2(r.r)}</td><td class="num">${fN(r.oc)}</td><td class="num">${fN(r.dc)}</td><td class="num">${r.rc==null?'thin':fP2(r.rc)}</td><td class="num">${fN(r.a)}</td></tr>`).join('')+'</tbody></table>';
+  const LN = [{v: 'whole sample', rows}].concat(lines || []);
+  const nm = c => c==null ? '' : fN(c), rt = v => v==null ? 'thin' : fP2(v), rtc = (l,v) => l.others ? '–' : rt(v);
+  const hd = (lines ? [EX.split] : []).concat(['Period','Mature','Loans','Obs loans','Defaults','fpd30 loans','Obs clients','Def clients','fpd30 clients','Obs amount']);
+  const nk = lines ? 1 : 0;
+  document.getElementById('exT').innerHTML = `<table class="dt"><thead><tr>${hd.map((t,i)=>`<th class="${i>1+nk?'num':''}">${esc(t)}</th>`).join('')}</tr></thead><tbody>`+
+    rows.map((_,i)=>rows.length-1-i).map(i=>(lines ? LN : LN.slice(0,1)).map(l=>{ const r = l.rows[i];
+      return `<tr>${lines?`<td>${esc(l.v)}</td>`:''}<td>${fullLbl(r.p,g)}</td><td>${r.mat?'yes':'no'}</td><td class="num">${fN(r.nl)}</td><td class="num">${fN(r.o)}</td><td class="num">${fN(r.d)}</td>`+
+      `<td class="num">${rt(r.r)}</td><td class="num">${l.others?'–':nm(r.oc)}</td><td class="num">${l.others?'–':nm(r.dc)}</td><td class="num">${rtc(l,r.rc)}</td><td class="num">${fN(r.a)}</td></tr>`; }).join('')).join('')+'</tbody></table>';
   document.getElementById('exCsv').onclick = e => { e.preventDefault(); e.stopPropagation();
     const q = v => `"${String(v).replace(/"/g,'""')}"`;
-    const meta = S.cols.map(c=>`${c}=${EX.sel[c]??'All'}`).join('; ');
-    const lines = [['source','sample','granularity','period','mature','loans','obs_loans','defaults','fpd30_loans','obs_clients','def_clients','fpd30_clients','obs_amount'].join(',')]
-      .concat(rows.map(r=>[EX.src, meta, g, r.p, r.mat, r.nl, r.o, r.d, r.r??'', r.oc, r.dc, r.rc??'', r.a].map(q).join(',')));
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/csv'}));
+    const meta = S.cols.filter(c=>c!==EX.split).map(c=>`${c}=${EX.sel[c]??'All'}`).join('; ');
+    const out = [['source','sample','granularity'].concat(lines ? ['split_col','split_value'] : []).concat(['period','mature','loans','obs_loans','defaults','fpd30_loans','obs_clients','def_clients','fpd30_clients','obs_amount']).join(',')]
+      .concat(LN.flatMap(l=>l.rows.map(r=>[EX.src, meta, g].concat(lines ? [EX.split, l.v] : [])
+        .concat([r.p, r.mat, r.nl, r.o, r.d, r.r??'', r.oc??'', r.dc??'', r.rc??'', r.a]).map(q).join(','))));
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out.join('\n')], {type:'text/csv'}));
     a.download = `explore_${EX.src}_${g}.csv`; document.body.appendChild(a); a.click(); a.remove(); };
 }
 function openExplore(src, sel, g){
   if(!EXD[src]) return;
   EX.src = src; EX.sel = Object.fromEntries(Object.entries(sel).filter(([c])=>EXD[src].cols.includes(c)));
   if(g && EXD[src].grans[g]) EX.g = g;
+  if(EX.split && EX.split in EX.sel) EX.split = null;
   if(MODAL) closeDetail();
   exControls(); exRender(); document.getElementById('exTab').click(); window.scrollTo(0,0);
 }

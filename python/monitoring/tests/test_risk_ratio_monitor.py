@@ -336,6 +336,36 @@ else:
                 ok('amount filter: very high minimum -> Top tab shows no spikes, no errors',
                    pg.evaluate("SPIKES.length") == 0 and not errs)
                 pg.click('#fAmtX')
+                # Explore split: top 5 by loans + Others; Others = sample minus the top lines (loans)
+                pg.click('#exTab'); pg.click('#exReset'); pg.wait_for_timeout(100)
+                pg.select_option('#exSp', 'b'); pg.wait_for_timeout(150)
+                sp = pg.evaluate("""(() => { const s = exSeries(), L = s.lines;
+                  return {v: L.map(l=>l.v), nl: L.map(l=>l.nl),
+                    sums: s.rows.every((r,i)=>L.reduce((a,l)=>a+l.rows[i].nl,0)===r.nl && L.reduce((a,l)=>a+l.rows[i].d,0)===r.d
+                                              && L.reduce((a,l)=>a+l.rows[i].o,0)===r.o),
+                    othClients: L.filter(l=>l.others).every(l=>l.rows.every(r=>r.rc==null)),
+                    leg: document.querySelectorAll('#exL .sw').length, dis: document.querySelector('#exF select[data-ci="1"]').disabled}; })()""")
+                ok('explore split: values ranked by loans, small ones in Others, lines add back to the sample',
+                   sp['v'] == ['electronics', 'fashion', 'grocery', 'travel', 'Others'] and sp['sums']
+                   and sp['nl'][:4] == sorted(sp['nl'][:4], reverse=True) and sp['dis'] and sp['leg'] == 6, sp)
+                ok('explore split: Others has no client ratio; client mode hides the Others line',
+                   sp['othClients'] and (pg.click('#exM button[data-m=rc]') or True) and
+                   pg.wait_for_timeout(100) is None and pg.locator('#exL .sw').count() == 5 and 'Others not shown' in pg.inner_text('#exS'))
+                pg.select_option('#exSp', 'c'); pg.select_option('#exF select[data-ci="0"]', label='web'); pg.wait_for_timeout(150)
+                sc = pg.evaluate("exSeries().lines.map(l=>[l.v, l.nl])")
+                web = L[(L.a == 'web') & (pd.to_datetime(L.disbursement_date) >= rm.lookback_start('weekly', NOW, CFG))
+                        & (pd.to_datetime(L.disbursement_date) < rm.current_period_start('weekly', NOW))]
+                ok('explore split: respects the other filters (c inside a = web), 5 values -> no Others',
+                   [v for v, _ in sc] == web.c.value_counts().index.tolist()[:5] and 'Others' not in [v for v, _ in sc], sc)
+                pg.click('#exD summary'); pg.wait_for_timeout(100)
+                ok('explore split: data table has one row per period per line',
+                   pg.locator('#exT tbody tr').count() == pg.evaluate("exG().p.length") * (1 + len(sc)) and not errs, errs[:1])
+                pg.click('#exReset')
+            if w == 360:
+                pg.click('#exTab'); pg.select_option('#exSp', 'b'); pg.wait_for_timeout(150)
+                ok('browser 360px: Explore split, no sideways scroll, no errors',
+                   not errs and not pg.evaluate('document.documentElement.scrollWidth > window.innerWidth'))
+                pg.screenshot(path=os.path.join(TMP, 'risk_split_360.png'), full_page=True)
             ok(f'browser {w}px: no JS errors, drill + clients on click, Explore link, no sideways scroll',
                not errs and n_drill == 2 and n_client == 1 and 'a = web' in exs and not wide,
                (errs[:1], n_drill, n_client, exs, wide))
