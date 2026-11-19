@@ -139,7 +139,7 @@ send_report(r, to=['team@company.com'], smtp_host='smtp.company.com', smtp_user=
 
 ```bash
 python python/monitoring/tests/test_change_monitor.py       # 36 checks, fake Spark
-python python/monitoring/tests/test_risk_ratio_monitor.py   # 46 checks; Part B needs pyspark + java
+python python/monitoring/tests/test_risk_ratio_monitor.py   # 51 checks; Part B needs pyspark + java
 python python/monitoring/tests/test_send_report_email.py    # 20 checks, fake SMTP
 ```
 
