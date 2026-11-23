@@ -57,7 +57,7 @@ r = run_risk_ratio_monitor(SOURCES, out, sql_var=sql_var)
 - `ratio = sum(def) / sum(obs)` and `ratio_client = distinct clients with def=1 / distinct clients with obs=1`. Defaults are counted on observed loans only.
 - **Matured periods only.** A period is scored when at least 80% of its loans are observable (`min_mature`). Newer periods are left out, because they would look like false drops.
 - **Thin periods.** A period counts only when `obs ≥ 4` or `observed amount > 5M` (`min_obs`, `min_amt`). Thin periods show as gaps and are never flagged. Values that never pass are skipped.
-- **Spark work:** one pass per granularity for all segment columns together (they are unpivoted), one for the column pairs, one for the top clients, and one GROUPING SETS cube for Explore.
+- **Spark work:** one pass per granularity for all segment columns together (they are unpivoted), one for the column pairs, one for the top clients, a small one for the clients to exclude (only when a value is concentrated), and one GROUPING SETS cube for Explore.
 
 **Min observed amount (mil)**, at the top of the report, hides rows whose period has less observed amount than you type. It applies to Top changes and All changes, including the spike counts and the source chips. It filters live, with no re-run, and is remembered in your browser. **clear** shows everything again. The drill-down and Explore are not filtered.
 
@@ -66,6 +66,7 @@ r = run_risk_ratio_monitor(SOURCES, out, sql_var=sql_var)
 - its weekly and monthly charts, with the baseline and ±2σ lines;
 - **the same sample split by every other segment column**: one line per sub-segment, and a table ranking which one drives the change. Small sub-segments are hidden.
 - **the top clients**: share of defaults and of observations, the ratio without the top 5, and a warning when the top 5 hold at least 40% of defaults (`conc_th`).
+- **Excluding concentrated clients**: when 4 or fewer clients (`excl_max`) hold at least 90% (`excl_share`) of the defaults **or** of the observed loans in the last 5 periods, the panel gets an **All clients / Excluding N concentrated clients** switch. Excluding redraws the charts without those clients over the whole history: ratio, client ratio, baseline, ±2σ, z and the date cards. Each chart says *"Excluding cuid a, b, c (x% of defaults · y% of observed loans)"*. Both ratios are exact, because the removed clients are known. The drill-down, Explore and the flags in Top / All changes still use all clients. `excl_max=0` turns it off.
 
 **The Explore tab** lets you pick any sample, one value or All per column. It shows fpd30 by loans and by clients as lines, and observed amount as grey bars in a panel below on the same time axis. It also has tiles, a data table and a CSV download. Distinct clients are exact for every filter, because the cube is computed with GROUPING SETS and not added up from smaller groups. So it's **one value or All per column**, not several values at once.
 
@@ -83,7 +84,7 @@ r = run_risk_ratio_monitor(SOURCES, out, sql_var=sql_var)
 | `now` | now, in `tz` | "Today" for the incomplete-period cut. |
 | `grans`, `n_recent`, `z_th`, `min_base`, `lookback`, `title`, … | see `DEFAULTS` in each file | Any other key of `DEFAULTS`. An unknown key is an error. |
 
-Risk monitor only: `min_obs`, `min_amt`, `min_mature`, `drill`, `drill_top_k`, `drill_min_elig`, `drill_min_recent`, `top_clients`, `conc_th`, `mask_client` (shows client ids as a short hash), `explore`, `explore_cols`, `explore_max_val`, `explore_min_loans`, `explore_max_rows`.
+Risk monitor only: `min_obs`, `min_amt`, `min_mature`, `drill`, `drill_top_k`, `drill_min_elig`, `drill_min_recent`, `top_clients`, `conc_th`, `excl_share`, `excl_max`, `mask_client` (shows client ids as a short hash), `explore`, `explore_cols`, `explore_max_val`, `explore_min_loans`, `explore_max_rows`.
 
 Both return a dict: `ok`, `out_path`, `res` (the scored table) and `failed`, plus `failed_step` and `error` when the run stopped.
 
@@ -128,7 +129,7 @@ send_report(r, to=['team@company.com'], smtp_host='smtp.company.com', smtp_user=
 
 ```bash
 python python/monitoring/tests/test_change_monitor.py       # 36 checks, fake Spark
-python python/monitoring/tests/test_risk_ratio_monitor.py   # 50 checks; Part B needs pyspark + java
+python python/monitoring/tests/test_risk_ratio_monitor.py   # 61 checks; Part B needs pyspark + java
 python python/monitoring/tests/test_send_report_email.py    # 20 checks, fake SMTP
 ```
 

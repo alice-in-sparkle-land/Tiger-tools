@@ -152,6 +152,44 @@ ok('mask_client: ids hashed, same client same code',
    masked['pd30|weekly|a|partner']['top'][0]['c'].startswith('c_')
    and masked['pd30|weekly|a|partner']['top'][0]['c'] == masked['pd30|monthly|a|partner']['top'][0]['c'])
 
+# exclude concentrated clients
+def pd_excl(tg):
+    out = []
+    for (g, c, v), t in tg.groupby(['date_name', 'column_name', 'column_value']):
+        df = prep(g); df = df[(df[c].astype(str) == v) & df.client_id.astype(str).isin(t.client)]
+        a = agg(df, ['date_value']); a['column_name'], a['column_value'], a['source'], a['date_name'] = c, v, 'pd30', g
+        out.append(a)
+    return pd.concat(out, ignore_index=True)
+
+ex90 = rm.find_excl(cl, res, CFG)
+ok('exclude: at 90%, only the tiny "rare" month qualifies (1 client holds every default)',
+   list(ex90) == ['pd30|monthly|b|rare'] and ex90['pd30|monthly|b|rare']['by'] == 'defaults'
+   and len(ex90['pd30|monthly|b|rare']['clients']) == 1, ex90)
+CFG7 = dict(CFG, excl_share=0.7)
+ex7 = rm.find_excl(cl, res, CFG7)
+pe = ex7.get('pd30|weekly|a|partner', {})
+ok('exclude: at 70%, partner (weekly) -> cuid 777 by defaults', pe.get('clients') == ['777'] and pe.get('by') == 'defaults'
+   and pe.get('sd', 0) >= 0.7, pe)
+ok('exclude: obs concentration also triggers (weekly rare at 50%)',
+   rm.find_excl(cl, res, dict(CFG, excl_share=0.5)).get('pd30|weekly|b|rare', {}).get('by') == 'obs')
+ok('exclude: excl_max=0 turns it off', rm.find_excl(cl, res, dict(CFG7, excl_max=0)) == {})
+excl = rm.score_excl(segs, pd_excl(rm.excl_targets(ex7)), ex7, periods, CFG7, NOW)
+xp = excl.get('pd30|weekly|a|partner', {})
+# direct: partner loans without 777, aggregated and rescored from scratch on the same periods
+dfp = prep('weekly'); dfp = dfp[(dfp.a == 'partner') & (dfp.client_id != 777)]
+dd = agg(dfp, ['date_value']).set_index('date_value')
+keep_p = periods[('pd30', 'weekly', 'a')][1]
+dd = dd.reindex(keep_p).fillna(0)
+el = (dd.obs_n >= CFG['min_obs']) | (dd.obs_amt > CFG['min_amt'])
+r_dir = [round(x, 5) if e and o > 0 else None for x, e, o in zip(dd.def_n / dd.obs_n.replace(0, np.nan), el, dd.obs_n)]
+rc_dir = [round(x, 5) if e and o > 0 else None for x, e, o in zip(dd.def_cl / dd.obs_cl.replace(0, np.nan), el, dd.obs_cl)]
+ok('exclude: partner without 777 = loans recomputed from scratch (ratio and client ratio, every period)',
+   xp.get('s') and [None if v is None else round(v, 5) for v in xp['s']['r']] == r_dir
+   and [None if v is None else round(v, 5) for v in xp['s']['rc']] == rc_dir)
+ok('exclude: the recent ratio falls without 777, with rows for the date cards',
+   xp.get('s') and len(xp['rows']) == CFG['n_recent']
+   and sum(xp['s']['d'][-5:]) < sum(series['pd30|weekly|a|partner']['d'][-5:]))
+
 cols = ['a', 'b', 'c']
 vals = {c: L[c].astype(str).value_counts().index[:CFG['explore_max_val']].tolist() for c in cols}
 explore = {'pd30': {'cols': cols, 'grans': {}}}
@@ -171,7 +209,10 @@ ok('explore: "All x All x All" exists and newest weeks are marked immature',
    '-1,-1,-1' in G['cells'] and G['mat'][-1] is False and G['mat'][0] is True)
 ok('explore: incomplete current week excluded', 'wk 2026-11-16' not in G['p'])
 
-html = rm.render_html(res, series, drill, clients, explore, [RISK_SOURCE], CFG, NOW)
+html = rm.render_html(res, series, drill, clients, explore, [RISK_SOURCE], CFG7, NOW, excl=excl)
+ok('mask_client: excluded ids hashed in the report',
+   json.loads(re.search(r"const D = (\{.*?\});\nconst M", rm.render_html(res, series, drill, clients, explore, [RISK_SOURCE],
+              dict(CFG7, mask_client=True), NOW, excl=excl), re.S).group(1))['excl']['pd30|weekly|a|partner']['clients'][0].startswith('c_'))
 D = json.loads(re.search(r"const D = (\{.*?\});\nconst M", html, re.S).group(1))
 ok('html: data embedded with drill, clients and explore', D['drill'] and D['clients'] and D['explore'])
 ok('html: offline (no http/https references)', not re.search(r'(src|href)=["\']https?:', html) and 'fetch(' not in html)
@@ -230,7 +271,7 @@ else:
     buf = []
     out_path = os.path.join(TMP, 'spark_report.html')
     r = rm.run_risk_ratio_monitor([SRC], out_path, spark=spark, sql_var=SV, replace_sql_var=rm_replace,
-                                  now=NOW, log=buf.append)
+                                  now=NOW, log=buf.append, excl_share=0.7)
     out = '\n'.join(buf)
     ok('spark run: ok, report written, every step printed',
        r['ok'] and os.path.exists(out_path) and '[4/4] write report' in out and f"{len(r.get('failed', []))}" == '0', out[-600:])
@@ -244,6 +285,8 @@ else:
         Ds = json.loads(re.search(r"const D = (\{.*?\});\nconst M", open(out_path, encoding='utf-8').read(), re.S).group(1))
         ok('spark run: drill-down identical', Ds['drill'] == json.loads(json.dumps(drill, default=str)))
         ok('spark run: top clients identical', Ds['clients'] == json.loads(json.dumps(clients, default=str)))
+        ok('spark run: exclude-clients view identical (clients, series, rows)',
+           Ds['excl'] == json.loads(json.dumps(excl, default=str)) and 'pd30|weekly|a|partner' in Ds['excl'], list(Ds['excl']))
         ok('spark run: explore cells identical',
            Ds['explore']['pd30']['grans']['weekly']['cells'] == json.loads(json.dumps(G['cells'])))
 
@@ -307,6 +350,29 @@ else:
                 ok('browser 360px: detail charts open at the newest periods',
                    pg.evaluate("[...document.querySelectorAll('#mB .ch')].every(c => c.scrollLeft > 0)"))
                 pg.screenshot(path=os.path.join(TMP, 'risk_modal_360.png'))
+            if w == 1280:
+                pg.evaluate("openDetail('pd30','a','partner')"); pg.wait_for_timeout(200)
+                y0 = pg.evaluate("D.series['pd30|weekly|a|partner'].r.slice(-5)")
+                has_bar = pg.locator('#xSeg').count() == 1
+                pg.click('#xSeg button[data-x="1"]'); pg.wait_for_timeout(200)
+                note = pg.inner_text('#mB .card >> nth=0')
+                chips = pg.evaluate("[...document.querySelectorAll('#mB .card:not(.dcard) .strip')][0].innerText")
+                ok('browser: partner panel offers "Excluding", the weekly chart says "Excluding cuid 777" and uses the rescored series',
+                   has_bar and 'Excluding cuid 777' in note and 'monthly' in pg.inner_text('#mB')
+                   and pg.evaluate("SER('pd30|weekly|a|partner') === D.excl['pd30|weekly|a|partner'].s") and not errs,
+                   (has_bar, note[:120], errs[:1]))
+                pg.click('#xSeg button[data-x="0"]'); pg.wait_for_timeout(100)
+                ok('browser: back to all clients; a value without concentration has no switch',
+                   'Excluding cuid' not in pg.inner_text('#mB') and
+                   (pg.evaluate("openDetail('pd30','b','travel')") or True) and pg.locator('#xSeg').count() == 0)
+                pg.evaluate("openDetail('pd30','a','web')"); pg.wait_for_timeout(150)
+            if w == 360:
+                pg.evaluate("openDetail('pd30','a','partner')"); pg.wait_for_timeout(150)
+                pg.click('#xSeg button[data-x="1"]'); pg.wait_for_timeout(150)
+                ok('browser 360px: exclude view, no sideways scroll', not errs and
+                   not pg.evaluate('document.documentElement.scrollWidth > window.innerWidth'))
+                pg.screenshot(path=os.path.join(TMP, 'risk_excl_360.png'))
+                pg.evaluate("openDetail('pd30','a','web')"); pg.wait_for_timeout(150)
             pg.click('#mEx')
             pg.wait_for_timeout(200)
             exs = pg.inner_text('#exS')

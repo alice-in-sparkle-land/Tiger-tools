@@ -50,6 +50,8 @@ DEFAULTS = {
     'top_clients':       10,
     'conc_th':           0.4,        # 'concentrated' when the top 5 clients hold >= 40% of defaults
     'mask_client':       False,      # True: client ids shown as a short hash
+    'excl_share':        0.9,        # 'exclude' option when <= excl_max clients hold >= 90% of defaults or of obs loans
+    'excl_max':          4,          # (last n_recent periods); 0 = off
     # explore tab
     'explore':           True,
     'explore_cols':      None,       # None = all seg_cols; or a shorter list
@@ -229,6 +231,26 @@ def spark_clients(sdf, src, g, cfg, rec_p):
     return pdf
 
 
+def spark_excl(spark, sdf, src, g, cfg, now, targets):
+    """Per period, what the concentrated clients add to their segment value (to subtract it).
+    targets: pandas column_name, column_value, client (the clients to exclude for each value)."""
+    F = _F()
+    sdf, cols = _base(sdf, src, g, cfg, now)
+    seg = F.explode(F.array(*[
+        F.struct(F.lit(s.split('.')[-1]).alias('column_name'),
+                 F.coalesce(F.col(s).cast('string'), F.lit('(null)')).alias('column_value'))
+        for s in src['seg_cols']]))
+    tg = spark.createDataFrame(targets[['column_name', 'column_value', 'client']].astype(str))
+    long = (sdf.where(F.col(src['client_col']).cast('string').isin(*sorted(set(targets['client'].astype(str)))))
+            .select(*cols, seg.alias('_s'))
+            .select('date_value', '_d', '_o', '_c', '_a', F.col('_s.column_name').alias('column_name'),
+                    F.col('_s.column_value').alias('column_value'), F.col('_c').cast('string').alias('client')))
+    pdf = (long.join(F.broadcast(tg), ['column_name', 'column_value', 'client'])
+           .groupBy('date_value', 'column_name', 'column_value').agg(*_metrics(F)).toPandas())
+    pdf['source'], pdf['date_name'] = src['name'], g
+    return pdf
+
+
 def spark_top_values(sdf, src, cfg):
     F = _F()
     cols = [c for c in (cfg['explore_cols'] or src['seg_cols']) if c in src['seg_cols']]
@@ -291,12 +313,14 @@ def _clean(df):
     return df
 
 
-def score_block(d, src, g, col, cfg, now, log=print):
+def score_block(d, src, g, col, cfg, now, log=print, periods=None):
+    """periods: use these matured periods (the 'exclude clients' rescoring keeps the segment's own periods)."""
     d = d[(d['date_value'] < current_period_start(g, now)) & (d['date_value'] >= lookback_start(g, now, cfg))]
     if d.empty:
         return None, {}, None
-    tot = d.groupby('date_value')[['n_loan', 'obs_n']].sum()
-    periods = sorted(tot.index[(tot['obs_n'] / tot['n_loan'].replace(0, np.nan)) >= cfg['min_mature']])
+    if periods is None:
+        tot = d.groupby('date_value')[['n_loan', 'obs_n']].sum()
+        periods = sorted(tot.index[(tot['obs_n'] / tot['n_loan'].replace(0, np.nan)) >= cfg['min_mature']])
     n_recent, min_base = cfg['n_recent'], cfg['min_base']
     if len(periods) < n_recent + min_base:
         log(f"      skip {src}/{g}/{col}: only {len(periods)} matured periods (need {n_recent + min_base})")
@@ -458,6 +482,81 @@ def pack_clients(cl, res, cfg):
     return out
 
 
+def find_excl(cl, res, cfg):
+    """Values where <= excl_max top clients hold >= excl_share of the defaults or of the observed loans
+    (last n_recent periods). Returns {key: {'clients': [...], 'by': 'defaults'|'obs', 'sd', 'so'}}."""
+    if cl is None or len(cl) == 0 or not cfg['excl_max']:
+        return {}
+    tot = res.groupby('key')[['obs_n', 'def_n']].sum()
+    cl = cl.copy()
+    cl['key'] = cl['source'] + '|' + cl['date_name'] + '|' + cl['column_name'] + '|' + cl['column_value'].astype(str)
+    cl = cl[cl['key'].isin(tot.index)]
+    out = {}
+    for key, dd in cl.groupby('key'):
+        to, td = float(tot.loc[key, 'obs_n']), float(tot.loc[key, 'def_n'])
+        best = None
+        for by, col, t in (('defaults', 'def_n', td), ('obs', 'obs_n', to)):
+            if t <= 0:
+                continue
+            d2 = dd.sort_values('rk') if by == 'defaults' else dd.sort_values(['obs_n', 'def_n', 'rk'], ascending=[False, False, True])
+            cum = d2[col].cumsum().values / t
+            k = next((i + 1 for i in range(min(cfg['excl_max'], len(cum))) if cum[i] >= cfg['excl_share'] - 1e-12), None)
+            if k and (best is None or k < len(best[1])):
+                best = (by, d2.head(k))
+        if best:
+            by, top = best
+            out[key] = {'clients': [str(c) for c in top['client']], 'by': by,
+                        'sd': _nz(top['def_n'].sum() / td, 4) if td else None,
+                        'so': _nz(top['obs_n'].sum() / to, 4) if to else None}
+    return out
+
+
+def excl_targets(excl):
+    """find_excl -> one row per (value, client) for spark_excl, grouped by (source, gran)."""
+    rows = []
+    for key, e in excl.items():
+        s_, g_, c_, v_ = key.split('|', 3)
+        rows += [{'source': s_, 'date_name': g_, 'column_name': c_, 'column_value': v_, 'client': c} for c in e['clients']]
+    return pd.DataFrame(rows, columns=['source', 'date_name', 'column_name', 'column_value', 'client'])
+
+
+def score_excl(raw, ex, excl, periods, cfg, now):
+    """Rescore each concentrated value without its clients, on the segment's own matured periods.
+    raw: the main aggregation; ex: spark_excl output. Exact for both ratios: the removed clients are known."""
+    if ex is None or len(ex) == 0:
+        return {}
+    raw, ex = _clean(raw), _clean(ex)
+    raw['column_value'], ex['column_value'] = raw['column_value'].astype(str), ex['column_value'].astype(str)
+    out = {}
+    for key, e in excl.items():
+        s_, g_, c_, v_ = key.split('|', 3)
+        per = periods.get((s_, g_, c_))
+        if per is None:
+            continue
+        d = raw[(raw.source == s_) & (raw.date_name == g_) & (raw.column_name == c_) & (raw.column_value == v_)]
+        x = ex[(ex.source == s_) & (ex.date_name == g_) & (ex.column_name == c_) & (ex.column_value == v_)]
+        mets = ['n_loan'] + _METS
+        x = x.set_index('date_value')[mets].reindex(d['date_value']).fillna(0).values
+        d = d.copy()
+        d[mets] = np.maximum(d[mets].values - x, 0)
+        r, ser, _ = score_block(d, s_, g_, c_, cfg, now, log=lambda *a: None, periods=per[0])
+        info = dict(e)
+        if r is None or key not in ser:
+            info['thin'] = True                                  # too little left to score without them
+        else:
+            r = r.copy()
+            r.loc[~r['eligible'].astype(bool), ['z_ratio', 'z_cl']] = np.nan
+            keep = ['period', 'lag', 'eligible', 'obs_n', 'def_n', 'obs_cl', 'def_cl',
+                    'ratio', 'base_ratio', 'z_ratio', 'ratio_cl', 'base_ratio_cl', 'z_cl']
+            r = r[keep].replace([np.inf, -np.inf], np.nan)
+            for c in ['z_ratio', 'z_cl']:
+                r[c] = r[c].round(2)
+            r['eligible'] = r['eligible'].astype(bool)
+            info['s'], info['rows'] = ser[key], r.astype(object).where(r.notna(), None).to_dict(orient='records')
+        out[key] = info
+    return out
+
+
 def pack_explore(cube, ks, cols, vals, g, cfg, now, min_loans):
     """Cube rows (k0..kn = value or '__ALL__') -> compact JSON for the Explore tab."""
     cube = _clean(cube)
@@ -483,7 +582,7 @@ def pack_explore(cube, ks, cols, vals, g, cfg, now, min_loans):
             'vals': vlist, 'cells': cells, 'min_loans': min_loans}
 
 
-def render_html(res, series, drill, clients, explore, sources, cfg, now, failed=()):
+def render_html(res, series, drill, clients, explore, sources, cfg, now, failed=(), excl=None):
     keep = ['ord', 'key', 'source', 'date_name', 'column_name', 'column_value', 'period', 'lag', 'eligible',
             'obs_n', 'def_n', 'obs_amt', 'obs_cl', 'def_cl', 'ratio', 'base_ratio', 'z_ratio',
             'ratio_cl', 'base_ratio_cl', 'z_cl', 'flag', 'direction', 'score']
@@ -498,19 +597,26 @@ def render_html(res, series, drill, clients, explore, sources, cfg, now, failed=
     payload = {
         'rows': out.to_dict(orient='records'),
         'series': {k: v for k, v in series.items() if k in keys},
-        'drill': drill, 'clients': clients, 'explore': explore,
+        'drill': drill, 'clients': clients, 'explore': explore, 'excl': _mask_excl(excl or {}, cfg),
         'meta': {'z': cfg['z_th'], 'n_recent': cfg['n_recent'], 'top_n': cfg['top_n'], 'grans': cfg['grans'],
                  'title': cfg['title'],
                  'sources': [{'name': s['name'], 'label': s.get('label', s['name']),
                               'cols': [c.split('.')[-1] for c in s['seg_cols']]} for s in sources],
                  'drill_recent': cfg['drill_min_recent'], 'drill_elig': cfg['drill_min_elig'],
-                 'drill_k': cfg['drill_top_k'], 'conc_th': cfg['conc_th'],
+                 'drill_k': cfg['drill_top_k'], 'conc_th': cfg['conc_th'], 'excl_share': cfg['excl_share'],
                  'failed': list(failed), 'min_obs': cfg['min_obs'], 'min_amt': cfg['min_amt'],
                  'min_mature': cfg['min_mature'], 'generated': now.strftime('%Y-%m-%d %H:%M'),
                  'spark_n': cfg['spark_n']},
     }
     data_json = json.dumps(payload, default=str).replace('</', '<\\/')
     return _HTML.replace('__DATA__', data_json)
+
+
+def _mask_excl(excl, cfg):
+    if not cfg['mask_client']:
+        return excl
+    h = lambda x: 'c_' + hashlib.sha1(str(x).encode()).hexdigest()[:8]
+    return {k: dict(v, clients=[h(c) for c in v['clients']]) for k, v in excl.items()}
 
 
 # ----------------------------------------------------------------------------
@@ -558,6 +664,8 @@ def run_risk_ratio_monitor(sources, out_path='risk_ratio_monitor.html', spark=No
         for g in cfg['grans']:
             if cfg['drill']:
                 after.append(('clients', src, g))
+                if cfg['excl_max']:
+                    after.append(('exclude clients', src, g))
         if cfg['explore']:
             after.append(('top values', src, None))
             for g in cfg['grans']:
@@ -616,7 +724,8 @@ def run_risk_ratio_monitor(sources, out_path='risk_ratio_monitor.html', spark=No
 
     # ---- 2. score ----
     log('\n[2/4] score')
-    res, series, periods = score(pd.concat(seg_frames, ignore_index=True), cfg, now, log)
+    raw = pd.concat(seg_frames, ignore_index=True)
+    res, series, periods = score(raw, cfg, now, log)
     if res is None:
         log('Nothing could be scored (not enough matured periods, or no value passes the obs / amount rule).')
         result['error'] = 'nothing scored'
@@ -629,7 +738,7 @@ def run_risk_ratio_monitor(sources, out_path='risk_ratio_monitor.html', spark=No
 
     # ---- 3. clients + explore ----
     log('\n[3/4] top clients and explore data')
-    client_frames, explore, tops = [], {}, {}
+    client_frames, explore, tops, ex_frames, excl = [], {}, {}, [], {}
     for j, (kind, src, g) in enumerate(after, len(plan) + 1):
         st = time.time()
         try:
@@ -641,6 +750,18 @@ def run_risk_ratio_monitor(sources, out_path='risk_ratio_monitor.html', spark=No
                 pdf = spark_clients(sdf_of(src), src, g, cfg, per[0][0][-cfg['n_recent']:])
                 client_frames.append(pdf)
                 log(f"  {j:>3}/{n_steps} {label(kind, src, g)}: {len(pdf):,} rows ({time.time() - st:.1f}s)")
+            elif kind == 'exclude clients':
+                found = find_excl(client_frames[-1] if client_frames and client_frames[-1]['source'].eq(src['name']).all()
+                                  and client_frames[-1]['date_name'].eq(g).all() else None, res, cfg)
+                if not found:
+                    log(f"  {j:>3}/{n_steps} {label(kind, src, g)}: no value concentrated in <= {cfg['excl_max']} clients, skipped")
+                    continue
+                tg = excl_targets(found)
+                pdf = spark_excl(spark, sdf_of(src), src, g, cfg, now, tg)
+                ex_frames.append(pdf)
+                excl.update(found)
+                log(f"  {j:>3}/{n_steps} {label(kind, src, g)}: {len(found)} value(s), {tg['client'].nunique()} client(s) "
+                    f"({time.time() - st:.1f}s)")
             elif kind == 'top values':
                 cols, vals = spark_top_values(sdf_of(src), src, cfg)
                 tops[src['name']] = (cols, vals)
@@ -660,11 +781,15 @@ def run_risk_ratio_monitor(sources, out_path='risk_ratio_monitor.html', spark=No
             if fail(j, kind, src, g, e, essential=False):
                 return result
     clients = pack_clients(pd.concat(client_frames, ignore_index=True) if client_frames else None, res, cfg)
+    excl = score_excl(raw, pd.concat(ex_frames, ignore_index=True) if ex_frames else None,
+                      {k: v for k, v in excl.items()}, periods, cfg, now)
+    if excl:
+        log(f"  exclude-clients view: {len(excl)} value(s)")
     explore = {k: v for k, v in explore.items() if v['grans']}
 
     # ---- 4. HTML ----
     log('\n[4/4] write report')
-    html = render_html(res, series, drill, clients, explore, sources, cfg, now, result['failed'])
+    html = render_html(res, series, drill, clients, explore, sources, cfg, now, result['failed'], excl)
     d = os.path.dirname(out_path)
     if d:
         os.makedirs(d, exist_ok=True)
@@ -782,6 +907,9 @@ h2 .srcl{margin-left:8px;vertical-align:middle;font-weight:500}
 background:var(--bg);color:var(--mut);font-size:11px;font-variant-numeric:tabular-nums}
 .lagd i.on{background:var(--upbg);color:var(--up);font-weight:700}
 @media (max-width:640px){.cs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* exclude concentrated clients */
+.exbar{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin:0 0 12px}.exbar .sub{margin:0;flex:1 1 260px}
+.exn{font-size:12px;color:var(--mut);margin:-4px 0 6px}.exn.on{color:var(--up);font-weight:600}
 /* explore */
 #exF select{min-width:120px}.exs{color:var(--mut);margin:-4px 0 12px}.exs b{color:var(--fg)}
 #exF .seg{align-self:flex-end}
@@ -988,10 +1116,23 @@ function fullLbl(p, g){
 const ROWIDX = {};
 D.rows.forEach(r => { (ROWIDX[r.key] = ROWIDX[r.key] || {})[r.period] = r; });
 let MODAL = null, METRIC = 'r';
+// exclude concentrated clients: the panel can swap a value's series for the one rescored without them
+const EXCL_D = D.excl || {}, EXIDX = {};
+Object.entries(EXCL_D).forEach(([k,e]) => (e.rows||[]).forEach(r => { (EXIDX[k] = EXIDX[k] || {})[r.period] = r; }));
+let EXCL = false;
+const useEx = key => EXCL && EXCL_D[key] && EXCL_D[key].s;
+const SER = key => useEx(key) ? EXCL_D[key].s : D.series[key];
+const RIX = key => useEx(key) ? (EXIDX[key] || {}) : (ROWIDX[key] || {});
+const exWho = e => e.clients.map(esc).join(', ');
+const exShare = (e, g) => `${fP(e.sd)} of defaults · ${fP(e.so)} of observed loans over the last ${M.n_recent} ${g.replace('ly','')}s`;
 
 function detailChart(g, src, col, val){
-  const key = `${src}|${g}|${col}|${val}`, s = D.series[key], rr = ROWIDX[key] || {};
-  const title = `<h3 style="margin-top:4px">${g}</h3>`;
+  const key = `${src}|${g}|${col}|${val}`, s = SER(key), rr = RIX(key);
+  let title = `<h3 style="margin-top:4px">${g}</h3>`;
+  if(EXCL && D.series[key]){ const e = EXCL_D[key];
+    title += !e ? `<div class="exn">Not concentrated for ${g}: showing all clients.</div>`
+      : e.thin ? `<div class="exn">Too little left without cuid ${exWho(e)} to score: showing all clients.</div>`
+      : `<div class="exn on">Excluding cuid ${exWho(e)} (${exShare(e, g)}).</div>`; }
   if(!s) return `<div class="card">${title}<div class="empty">Not scored for this granularity (not enough history, or no data).</div></div>`;
   const isR = METRIC==='r', vals = isR ? s.r : s.rc;
   const mu = isR ? s.mr : s.mc, sd = isR ? s.sr : s.sc, zk = isR ? 'z_ratio' : 'z_cl';
@@ -1043,7 +1184,7 @@ function detailChart(g, src, col, val){
 
 function bindHover(card){
   const svg = card.querySelector('svg'); if(!svg) return;
-  const key = svg.dataset.key, s = D.series[key], g = key.split('|')[1], rr = ROWIDX[key] || {};
+  const key = svg.dataset.key, s = SER(key), g = key.split('|')[1], rr = RIX(key);
   const tip = card.querySelector('.tip'), hv = svg.querySelector('.hv'), hit = svg.querySelector('.hit');
   const vb = svg.viewBox.baseVal, L=+hit.getAttribute('x'), Wp=+hit.getAttribute('width'), n=s.p.length;
   const move = e => {
@@ -1143,7 +1284,9 @@ function clientCard(key, g){
     `<div class="${conc?'hotc':''}"><b>${fP(C.top5_sd)}</b><span>of defaults from the top 5 clients</span></div>`+
     `<div><b>${fP2(C.ratio)}</b><span>loan ratio, whole segment</span></div>`+
     `<div class="${conc?'hotc':''}"><b>${fP2(C.ex5)}</b><span>loan ratio without the top 5</span></div></div>`;
-  if(conc) h += `<div class="sub" style="margin:-2px 0 8px;color:var(--up)">Concentrated: ${fP(C.top5_sd)} of the defaults come from 5 clients, so check them before reading this as a segment-wide shift.</div>`;
+  const xe = EXCL_D[key];
+  if(xe) h += `<div class="sub" style="margin:-2px 0 8px;color:var(--up)">Cuid ${exWho(xe)} hold ${exShare(xe, g)}. Use <b>Excluding</b> at the top to see this segment without them.</div>`;
+  else if(conc) h += `<div class="sub" style="margin:-2px 0 8px;color:var(--up)">Concentrated: ${fP(C.top5_sd)} of the defaults come from 5 clients, so check them before reading this as a segment-wide shift.</div>`;
   const mx = Math.max(...C.top.map(t=>t.d), 1);
   h += `<div class="wrap"><table class="dt"><thead><tr><th class="num">#</th><th>Client</th><th class="num">Obs loans</th><th class="num">Defaults</th>`+
     `<th>Share of defaults</th><th class="num">Share of obs</th><th class="num">Obs amount</th>`+
@@ -1227,7 +1370,14 @@ function renderModal(){
     ? 'Flagged: ' + hits.map(r=>`${r.date_name} ${r.period} (${r.direction})`).join(' · ')
     : 'No flags in the last ' + M.n_recent + ' periods';
   const mB = document.getElementById('mB');
-  mB.innerHTML = M.grans.map(g=>detailChart(g, src, col, val)).join('') +
+  const xk = M.grans.map(g=>`${src}|${g}|${col}|${val}`).filter(k=>EXCL_D[k]);
+  if(!xk.length) EXCL = false;
+  const who = [...new Set(xk.flatMap(k=>EXCL_D[k].clients))];
+  const xbar = xk.length ? `<div class="exbar"><div class="seg" id="xSeg"><button data-x="0" class="${EXCL?'':'on'}">All clients</button>`+
+    `<button data-x="1" class="${EXCL?'on':''}">Excluding ${who.length} concentrated client${who.length>1?'s':''}</button></div>`+
+    `<span class="sub">${who.length>1?'These clients hold':'This client holds'} ≥ ${Math.round(M.excl_share*100)}% of the defaults or observed loans in the last ${M.n_recent} periods`+
+    ` (${xk.map(k=>k.split('|')[1]).join(', ')}): cuid ${who.map(esc).join(', ')}. The drill-down below always uses all clients.</span></div>` : '';
+  mB.innerHTML = xbar + M.grans.map(g=>detailChart(g, src, col, val)).join('') +
     `<div class="leg"><span><i style="border-color:var(--mut)"></i>baseline mean</span><span><i style="border-color:var(--up)"></i>+${M.z}σ (spike line)</span>`+
     `<span><i style="border-color:var(--dn)"></i>−${M.z}σ (drop line)</span><span>shaded = last ${M.n_recent} scored periods · hover for exact values</span></div>` +
     drillSection(src, col, val);
@@ -1235,9 +1385,10 @@ function renderModal(){
   mB.querySelectorAll('.dcard').forEach(bindDrill);
   requestAnimationFrame(() => mB.querySelectorAll('.ch').forEach(c => c.scrollLeft = c.scrollWidth));   // phones: open at the newest periods
   mB.querySelectorAll('#dSeg button').forEach(b => b.onclick = () => { DG = b.dataset.g; renderModal(); });
+  mB.querySelectorAll('#xSeg button').forEach(b => b.onclick = () => { EXCL = b.dataset.x==='1'; renderModal(); });
   document.querySelectorAll('#mSeg button').forEach(b=>b.classList.toggle('on', b.dataset.m===METRIC));
 }
-function openDetail(src, col, val){ MODAL = {src, col, val}; DG = null; renderModal(); document.getElementById('ov').hidden = false; document.body.style.overflow='hidden'; }
+function openDetail(src, col, val){ MODAL = {src, col, val}; DG = null; EXCL = false; renderModal(); document.getElementById('ov').hidden = false; document.body.style.overflow='hidden'; }
 function closeDetail(){ document.getElementById('ov').hidden = true; document.body.style.overflow=''; MODAL = null; }
 document.addEventListener('click', e => {
   const a = e.target.closest('.cv'); if(a) return openDetail(a.dataset.src, a.dataset.col, a.dataset.cv);
