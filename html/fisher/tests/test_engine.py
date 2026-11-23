@@ -102,7 +102,7 @@ def brute(pdf, cfg, a_s, a_e):
     """Every 2x2 table the engine should build, the slow obvious way."""
     pdf = pdf.copy()
     pdf['d'] = pdf['txn_date'].dt.normalize()
-    pdf['g'] = pdf['seller_group'] + ' | ' + pdf['h3_9']
+    pdf['g'] = pdf[cfg['peer_cols']].astype(str).agg(' | '.join, axis=1)
     flags = [m for m in cfg['metrics'] if m['kind'] == 'flag']
     pdf['f_high_util'] = (pdf['utilization'] > 0.9).astype(int)
     pdf['f_big_ticket'] = (pdf['txn_amount'] >= 2500000).astype(int)
@@ -171,11 +171,15 @@ if spark is not None:
     pdf = fake()
     df = spark.createDataFrame(pdf)
     cfg = dict(CONFIG, anchor_start='2026-08-01')
+    shadow = {}
+    exec('from pyspark.sql.functions import *', shadow)      # what many notebooks do first
+    exec(compile(open(ENGINE, encoding='utf-8').read(), ENGINE, 'exec'), shadow)
+    check('notebook case: sum/max/min/round are Spark functions', shadow['sum'] is not sum and shadow['max'] is not max)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        r = run(df, cfg, spark=spark)
+        r = shadow['run_fisher_backtest'](df, cfg, spark=spark)
     log = buf.getvalue()
-    check('run ok', r['ok'], log[-800:])
+    check('run ok (after from pyspark.sql.functions import *)', r['ok'], log[-800:])
     det, summ = r['detail'], r['summary']
     a_s, a_e = pd.Timestamp('2026-08-01'), pd.Timestamp(pdf['txn_date'].max().normalize())
     check('anchor range printed', 'anchors 2026-08-01 to ' + str(a_e.date()) in log, log[:600])
@@ -218,13 +222,58 @@ if spark is not None:
     check('every alert is a fired row', det.loc[det['alert'], 'fired'].all())
     fired = det[det['fired']]
     check('fired = q <= 0.05 and OR >= 2', ((fired['q'] <= 0.05) & (fired['odds_ratio'] >= 2)).all())
-    for c in ['precision', 'recall', 'recall_early', 'median_lead_days', 'def_rate_alerted', 'default_lift']:
+    for c in ['rule_type', 'precision', 'recall', 'recall_early', 'median_lead_days', 'lift_after_alert',
+              'def_rate_after_alert', 'def_rate_never_alerted', 'lift_in_window']:
         check(f'summary has {c}', c in summ.columns)
+    check('rule_type: volume rules marked volume, the rest flag',
+          (summ.loc[summ['metric'] == 'volume', 'rule_type'] == 'volume').all() and
+          (summ.loc[summ['metric'] != 'volume', 'rule_type'] == 'flag').all())
     best = summ[(summ['metric'] == 'high_util') & (summ['test'] == 'self') & (summ['comparison'] == '7 vs 8-15')]
-    check('high_util 7 vs 8-15 has precision > 0 and default lift > 1',
-          len(best) > 0 and (best['precision'] > 0).all() and (best['default_lift'] > 1).all(), best.to_string())
+    check('high_util 7 vs 8-15 has precision > 0 and lift after alert > 1',
+          len(best) > 0 and (best['precision'] > 0).all() and (best['lift_after_alert'] > 1).all(), best.to_string())
+    # forward lift rebuilt by hand for one rule
+    rule = dict(metric='high_util', comparison='7 vs 8-15', unit='customer', test='self')
+    g = det[(det[list(rule)] == pd.Series(rule)).all(axis=1) & det['alert']]
+    L = pdf[pdf['f_pd30_obs'] == 1].assign(day=lambda x: x['txn_date'].dt.normalize())
+    L = L[(L['day'] > a_s) & (L['day'] <= a_e + pd.Timedelta(days=30))]
+    cov = {(m, t + pd.Timedelta(days=i)) for m, t in zip(g['merchant'], g['anchor']) for i in range(1, 31)}
+    inside = L[[(m, d) in cov for m, d in zip(L['merchant_id'], L['day'])]]
+    never = L[~L['merchant_id'].isin(set(g['merchant']))]
+    want = round((inside['f_pd30'].mean()) / never['f_pd30'].mean(), 2)
+    got = summ[(summ[list(rule)] == pd.Series(rule)).all(axis=1)]['lift_after_alert'].iloc[0]
+    check(f'lift_after_alert = hand rebuild ({got} vs {want})', abs(got - want) < 0.011)
     check('summary has one row per rule with tests',
           len(summ) == summ[['metric', 'comparison', 'unit', 'test']].drop_duplicates().shape[0])
+
+    # peer fallback: every h3 cell has 5 other sellers < min_peers 6, so all peer tests fall back to seller_group
+    cfg_fb = dict(CONFIG, anchor_start='2026-09-01', min_peers=6, peer_fallback_cols=['seller_group'],
+                  susp_cond=None, def_col=None, obs_col=None)
+    with contextlib.redirect_stdout(io.StringIO()):
+        r5 = run(df, cfg_fb, spark=spark)
+    check('fallback run ok', r5['ok'])
+    pe = r5['detail'][r5['detail']['test'] == 'peer']
+    check('  ... every peer test used the fallback group', len(pe) > 0 and (pe['peer_level'] == 'fallback').all())
+    check('  ... travel (5 other sellers in seller_group) has no peer test', not pe['peer_group'].str.contains('travel').any())
+    ref5 = brute(pdf, dict(CONFIG, peer_cols=['seller_group'], min_peers=6), pd.Timestamp('2026-09-01'), a_e)
+    ref5 = ref5[(ref5['test'] == 'peer') & (ref5['a'] * ref5['d'] > ref5['b'] * ref5['c'])]
+    m5 = ref5.merge(pe, on=keys, how='outer', indicator=True, suffixes=('_r', '_e'))
+    check('  ... peer tables = brute force on seller_group alone',
+          (m5['_merge'] == 'both').all() and all((m5[c + '_r'] == m5[c + '_e']).all() for c in 'abcd'),
+          m5['_merge'].value_counts().to_dict())
+
+    # BH over every rule of the day
+    cfg_day = dict(CONFIG, anchor_start='2026-09-01', units=['txn'], bh_scope='day', susp_cond=None, def_col=None, obs_col=None)
+    with contextlib.redirect_stdout(io.StringIO()):
+        r6 = run(df, cfg_day, spark=spark)
+    ref6 = ref[(ref['unit'] == 'txn') & (ref['anchor'] >= '2026-09-01')].copy()
+    ref6['q'] = ref6.groupby('anchor')['p'].transform(lambda s: false_discovery_control(s.values))
+    m6 = r6['detail'].merge(ref6[keys + ['q']], on=keys, suffixes=('', '_r'))
+    sm = m6['q_r'] <= 0.5
+    check('bh_scope=day: q = BH over all rules that day', r6['ok'] and len(m6) == len(r6['detail']) and
+          np.allclose(m6.loc[sm, 'q'], m6.loc[sm, 'q_r'], rtol=1e-6, atol=1e-12))
+    check('  ... family size = all tests that day', (r6['detail'].groupby('anchor')['n_tests'].nunique() == 1).all() and
+          (r6['detail'].groupby('anchor')['n_tests'].first() == ref6.groupby('anchor').size().reindex(
+              r6['detail'].groupby('anchor')['n_tests'].first().index)).all())
 
     # transactions only, no peers, no labels
     buf = io.StringIO()

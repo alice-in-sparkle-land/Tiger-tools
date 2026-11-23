@@ -73,6 +73,15 @@ with sync_playwright() as p:
         pg.uncheck('[data-k="peer.on"]')
         check('peer check off: peer_cols []', '"peer_cols": []' in pg.inner_text('#code'))
         pg.check('[data-k="peer.on"]')
+        pg.fill('[data-k="peer.fallback"]', 'seller_group')
+        pg.select_option('[data-k="rule.bh"]', 'day')
+        pg.fill('[data-k="labels.liftDays"]', '45')
+        code = pg.inner_text('#code')
+        check('fallback, BH scope and lift days reach the file', '"peer_fallback_cols": ["seller_group"]' in code
+              and '"bh_scope": "day"' in code and '"lift_days": 45' in code)
+        pg.fill('[data-k="peer.fallback"]', 'seller_group, h3_9')
+        check('fallback same as the peer group: error', 'coarser group' in pg.inner_text('#errs'))
+        pg.fill('[data-k="peer.fallback"]', 'seller_group')
         # settings survive reload
         pg.reload(); pg.wait_for_timeout(300)
         check('settings kept after reload', pg.input_value('[data-k="cols.merchant"]') == 'seller_id')
@@ -103,6 +112,7 @@ with sync_playwright() as p:
     for i in (3, 2):
         pg.locator('.cmp').nth(i).locator('[data-del-c]').click()   # keep 1 vs 2-8 and 7 vs 8-15
     pg.fill('[data-k="anchor.start"]', '2026-08-15')
+    pg.fill('[data-k="peer.fallback"]', 'seller_group')
     with pg.expect_download() as d:
         pg.click('#dl')
     gen = os.path.join(OUT, d.value.suggested_filename); d.value.save_as(gen)
@@ -126,11 +136,12 @@ if spark is not None:
     with contextlib.redirect_stdout(io.StringIO()):
         df = spark.createDataFrame(ns['fake']())
     g = {'spark': spark, 'df': df}
+    exec('from pyspark.sql.functions import *', g)            # the notebook case that broke sum()
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         exec(open(gen).read(), g)
     log = buf.getvalue()
-    check('the generated file runs on df and spark', g['r']['ok'], log[-600:])
+    check('the generated file runs on df and spark, after from pyspark.sql.functions import *', g['r']['ok'], log[-600:])
     check('  ... and leaves detail and summary', len(g['detail']) > 0 and len(g['summary']) > 0)
     check('  ... the planted sellers alert', set(g['detail'].loc[g['detail']['alert'], 'merchant']) >= {'M04', 'M07'})
     print(g['summary'].head(8).to_string())

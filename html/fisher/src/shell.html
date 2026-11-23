@@ -55,8 +55,9 @@
     <div class="grid" style="margin-top:8px">
       <label>Peer group columns<input class="in" data-k="peer.cols" placeholder="seller_group, h3_9"></label>
       <label>Min other sellers<input class="in" data-k="peer.min" inputmode="numeric"></label>
+      <label>Fallback group columns <span class="muted">(optional)</span><input class="in" data-k="peer.fallback" placeholder="seller_group"></label>
     </div>
-    <p class="hint">Peers = the other sellers with the same values in these columns, in the same recent window. The seller itself is always left out. Counting by customers, its own customers are left out of the peer row too, so the two rows never share a person.</p>
+    <p class="hint">Peers = the other sellers with the same values in these columns, in the same recent window. The seller itself is always left out. Counting by customers, its own customers are left out of the peer row too, so the two rows never share a person. When the group has fewer other sellers than the minimum, the fallback group (coarser, e.g. <code>seller_group</code> alone) is used instead; <code>detail.peer_level</code> says which.</p>
   </section>
 
   <section class="card">
@@ -67,8 +68,9 @@
       <label>Flagged-on date column<input class="in" data-k="labels.suspDate" placeholder="blank = transaction date"></label>
       <label>Default column (0/1)<input class="in" data-k="labels.def" placeholder="f_pd30"></label>
       <label>Observed column (0/1)<input class="in" data-k="labels.obs" placeholder="f_pd30_obs"></label>
+      <label>Days after an alert (lift)<input class="in" data-k="labels.liftDays" inputmode="numeric"></label>
     </div>
-    <p class="hint">A seller is suspicious from the date of its first suspicious transaction (or the flagged-on date). Default lift compares matured loans inside alert windows with all other matured loans.</p>
+    <p class="hint">A seller is suspicious from the date of its first suspicious transaction (or the flagged-on date). <b>Lift after alert</b>: default rate of matured loans in the N days after each alert, against sellers the rule never alerted. <b>Lift in window</b> (looks back): loans inside the alert's own recent window.</p>
   </section>
 
   <section class="card">
@@ -80,8 +82,9 @@
       <label>Min recent total<input class="in" data-k="rule.minTotal" inputmode="numeric"></label>
       <label>Min flagged<input class="in" data-k="rule.minFlag" inputmode="numeric"></label>
       <label>Max rows to pandas<input class="in" data-k="rule.maxRows" inputmode="numeric"></label>
+      <label>BH over<select class="in" data-k="rule.bh"><option value="rule">Sellers, per rule and day</option><option value="day">Every rule that day</option></select></label>
     </div>
-    <p class="hint">A test runs when the seller has at least <i>min recent total</i> in the recent window and at least <i>min flagged</i> flagged (for volume: its own count). It fires when q (Benjamini–Hochberg over all sellers that day) and the odds ratio both pass. One-sided: only increases fire.</p>
+    <p class="hint">A test runs when the seller has at least <i>min recent total</i> in the recent window and at least <i>min flagged</i> flagged (for volume: its own count). It fires when q (Benjamini–Hochberg over all sellers that day) and the odds ratio both pass. One-sided: only increases fire. <i>Per rule</i> keeps a 5% false-discovery rate for each rule on its own (right for picking one rule); <i>every rule that day</i> keeps it across all the rules together (right when several rules go live at once).</p>
   </section>
 
   <section class="card out" id="out">

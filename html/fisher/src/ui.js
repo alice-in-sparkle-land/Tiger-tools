@@ -12,9 +12,9 @@ const DEF={
            {name:'volume',kind:'volume',expr:'',op:'>=',value:''}],
   comps:[{rs:1,re:1,bs:2,be:8},{rs:1,re:7,bs:8,be:15},{rs:1,re:7,bs:8,be:35},{rs:1,re:30,bs:31,be:90}],
   anchor:{start:'',end:'',skipLast:false},
-  peer:{on:true,cols:'seller_group, h3_9',min:'3'},
-  labels:{susp:'f_suspicious = 1',suspDate:'',def:'f_pd30',obs:'f_pd30_obs'},
-  rule:{q:'0.05',or:'2',cooldown:'7',minTotal:'10',minFlag:'5',maxRows:'3000000'}
+  peer:{on:true,cols:'seller_group, h3_9',min:'3',fallback:''},
+  labels:{susp:'f_suspicious = 1',suspDate:'',def:'f_pd30',obs:'f_pd30_obs',liftDays:'30'},
+  rule:{q:'0.05',or:'2',cooldown:'7',minTotal:'10',minFlag:'5',maxRows:'3000000',bh:'rule'}
 };
 const clone=o=>JSON.parse(JSON.stringify(o));
 let state=clone(DEF),storageOk=true,pending=null;
@@ -67,12 +67,15 @@ function validate(){
   if(isDate(state.anchor.start)&&isDate(state.anchor.end)&&state.anchor.start>state.anchor.end)add('anchor.end','Must be after From.');
   if(state.peer.on){const pc=list(state.peer.cols);if(!pc.length)add('peer.cols','List at least one column, or untick the peer check.');
     else if(!pc.every(c=>IDENT.test(c)))add('peer.cols','Comma-separated plain column names.');
-    if(!isInt(state.peer.min)||+state.peer.min<1)add('peer.min','A whole number, 1 or more.');}
+    if(!isInt(state.peer.min)||+state.peer.min<1)add('peer.min','A whole number, 1 or more.');
+    const fc=list(state.peer.fallback);if(fc.length&&!fc.every(c=>IDENT.test(c)))add('peer.fallback','Comma-separated plain column names.');
+    else if(fc.length&&fc.join(',')===pc.join(','))add('peer.fallback','Use a coarser group than the peer group.');}
   const L=state.labels;
   if(L.suspDate.trim()&&!IDENT.test(L.suspDate.trim()))add('labels.suspDate','Use a plain column name.');
   if(L.suspDate.trim()&&!L.susp.trim())add('labels.suspDate','Only used with a suspicious condition.');
   if(/;|--/.test(L.susp))add('labels.susp','One expression, without ; or --.');
   ['def','obs'].forEach(k=>{if(L[k].trim()&&!IDENT.test(L[k].trim()))add('labels.'+k,'Use a plain column name.');});
+  if(L.def.trim()&&(!isInt(L.liftDays)||+L.liftDays<1||+L.liftDays>365))add('labels.liftDays','Whole days, 1 to 365.');
   if(!!L.def.trim()!==!!L.obs.trim())add(L.def.trim()?'labels.obs':'labels.def','Default lift needs both the default and the observed column.');
   const R=state.rule;
   if(!isNum(R.q)||+R.q<=0||+R.q>1)add('rule.q','Between 0 and 1.');
@@ -91,10 +94,10 @@ function config(){
     metrics:state.metrics.map(m=>m.kind==='volume'?{name:m.name.trim(),kind:'volume'}:{name:m.name.trim(),kind:'flag',expr:metricExpr(m)}),
     comparisons:state.comps.map(c=>({name:cmpName(c),recent:[c.rs,c.re],base:[c.bs,c.be]})),
     units:['customer','txn'].filter(u=>state.units[u]),
-    peer_cols:state.peer.on?list(state.peer.cols):[],min_peers:+state.peer.min||1,
+    peer_cols:state.peer.on?list(state.peer.cols):[],min_peers:+state.peer.min||1,peer_fallback_cols:state.peer.on?list(state.peer.fallback):[],
     anchor_start:state.anchor.start.trim()||null,anchor_end:state.anchor.end.trim()||null,skip_last_day:state.anchor.skipLast,
-    min_total:+R.minTotal,min_flag:+R.minFlag,q_max:+R.q,or_min:+R.or,cooldown:+R.cooldown,max_rows:+R.maxRows,
-    susp_cond:L.susp.trim()||null,susp_date_col:L.suspDate.trim()||null,def_col:L.def.trim()||null,obs_col:L.obs.trim()||null
+    min_total:+R.minTotal,min_flag:+R.minFlag,q_max:+R.q,or_min:+R.or,cooldown:+R.cooldown,max_rows:+R.maxRows,bh_scope:R.bh==='day'?'day':'rule',
+    susp_cond:L.susp.trim()||null,susp_date_col:L.suspDate.trim()||null,def_col:L.def.trim()||null,obs_col:L.obs.trim()||null,lift_days:+L.liftDays||30
   };
 }
 function pyLit(v,ind){
@@ -165,7 +168,7 @@ function refresh(){
 function where(k){if(/^m\d+$/.test(k)){const m=state.metrics[+k.slice(1)];return 'Metric '+(m&&m.name?m.name:'#'+(+k.slice(1)+1));}
   if(/^c\d+$/.test(k))return 'Comparison '+(+k.slice(1)+1);
   const N={'cols.date':'Date column','cols.merchant':'Seller column','cols.customer':'Customer column','cols.amount':'Amount column',units:'Count by',metrics:'Metrics',comps:'Comparisons',
-    'anchor.start':'Anchor from','anchor.end':'Anchor to','peer.cols':'Peer columns','peer.min':'Min other sellers','labels.susp':'Suspicious condition','labels.suspDate':'Flagged-on date',
+    'anchor.start':'Anchor from','anchor.end':'Anchor to','peer.cols':'Peer columns','peer.min':'Min other sellers','peer.fallback':'Fallback group','labels.liftDays':'Days after an alert','labels.susp':'Suspicious condition','labels.suspDate':'Flagged-on date',
     'labels.def':'Default column','labels.obs':'Observed column','rule.q':'q-value','rule.or':'Odds ratio','rule.cooldown':'Cooldown','rule.minTotal':'Min recent total','rule.minFlag':'Min flagged','rule.maxRows':'Max rows'};
   return N[k]||k;}
 function all(){renderFields();renderLists();refresh();}

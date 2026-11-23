@@ -15,7 +15,7 @@ detail, summary = r['detail'], r['summary']
 
 It prints every step. At the first failure it prints one line, `FAILED at step i/n: <step>: <error>`, then `not run: ...`, and `r['ok']` is False.
 
-The file imports only pandas, numpy and PySpark. The Fisher test is written inside it, so it doesn't need `scipy`.
+The file imports only pandas, numpy and PySpark. The Fisher test is written inside it, so it doesn't need `scipy`. It works after `from pyspark.sql.functions import *`, which replaces Python's `sum`, `max`, `min` and `round` with Spark's: the engine keeps its own copies of the Python ones.
 
 ## What it tests
 
@@ -30,16 +30,19 @@ For every seller × anchor × **metric** × **comparison** × **count unit** × 
 | **Volume** | seller vs all other sellers, recent vs base | seller vs its peers, recent vs base |
 
 - **Count unit.** `customer` counts each person once per window (a customer is flagged if they had a flagged transaction there). `txn` counts transactions. Repeated transfers from one customer are not independent, so `customer` is the safer test. `txn` also catches a few customers paying many times. Run both and compare them in the summary.
-- **Peers** are the other sellers with the same values in the peer columns (e.g. `seller_group`, `h3_9`). The seller itself is always left out. Counting by customers, the seller's own customers are also left out of the peer row, so the two rows never share a person. A peer test runs only with at least `min_peers` other sellers.
+- **Peers** are the other sellers with the same values in the peer columns (e.g. `seller_group`, `h3_9`). The seller itself is always left out. Counting by customers, the seller's own customers are also left out of the peer row, so the two rows never share a person. A peer test runs only with at least `min_peers` other sellers. With **fallback group columns** (e.g. `seller_group` alone), a seller whose peer group is too small that day is compared with the coarser group instead; `detail.peer_level` says `group` or `fallback`, and `peer_sellers` how many other sellers were in it. Peer columns should describe the seller (one value per seller).
 - **Gate.** A test runs only when the seller has at least `min_total` in the recent window and at least `min_flag` flagged (for volume, its own count). Peers also need `min_total`.
-- **Fires** when the Benjamini–Hochberg q-value is ≤ `q_max` **and** the odds ratio (0.5 added to every cell) is ≥ `or_min`. BH runs over all sellers tested that day for that rule. Rows leaning down (a·d ≤ b·c) are not brought into pandas, but they still count in the family size. Their p-values are large, so q is exact wherever it matters and can only be slightly higher elsewhere.
+- **Fires** when the Benjamini–Hochberg q-value is ≤ `q_max` **and** the odds ratio (0.5 added to every cell) is ≥ `or_min`. The odds ratio gate stops very large sellers firing on tiny changes that still give a tiny p.
+- **BH scope** (`bh_scope`). `rule` (default): over all sellers tested that day for that rule, so each rule keeps its own 5% false-discovery rate (right when you pick one rule to go live). `day`: over every rule and seller that day, so the rate holds across all rules together (right when several rules go live at once). Rows leaning down (a·d ≤ b·c) are not brought into pandas, but they still count in the family size. Their p-values are large, so q is exact wherever it matters and can only be slightly higher elsewhere, never lower (tested against BH over every row).
 - **Alert** is a fired day at least `cooldown` days after the same rule last alerted the same seller.
+
+**Volume rules answer a different question** from flag rules: whether the seller's *share* of transactions (or customers) rose, which cancels platform growth and seasonality, not whether a fraud signal rose. The summary marks them `rule_type = volume`; compare them with each other rather than with flag rules.
 
 Recent and base windows of the same seller share customers, so the self test is not strictly independent. Judge the rules by the backtest numbers, not by p alone. With short windows (e.g. 1 day) few sellers pass the gate on a given day, so BH has little to correct. The summary shows whether such rules are noisy.
 
 ## Output
 
-`detail` (pandas) has one row per tested seller × day × rule that leans upward: `anchor, merchant, peer_group, metric, comparison, unit, test, a, b, c, d, share_recent, share_ref, odds_ratio, or_lo, or_hi, p, q, n_tests, peer_sellers, fired, alert`.
+`detail` (pandas) has one row per tested seller × day × rule that leans upward: `anchor, merchant, peer_group, metric, comparison, unit, test, a, b, c, d, share_recent, share_ref, odds_ratio, or_lo, or_hi, p, q, n_tests` (the BH family size), `peer_sellers, peer_level, fired, alert`.
 
 `summary` (pandas) has one row per rule (metric × comparison × unit × test):
 
@@ -49,9 +52,13 @@ Recent and base windows of the same seller share customers, so the self test is 
 | `precision` | Alerted sellers that carry a suspicious label (at any date) |
 | `susp_in_range`, `recall` | Sellers first flagged suspicious inside the anchor range, and the share of them the rule alerted |
 | `recall_early`, `median_lead_days` | Share alerted on or before the flag date, and the median days from first alert to flag date (positive = earlier) |
-| `obs_alerted`, `def_rate_alerted`, `def_rate_other`, `default_lift` | Matured loans inside the recent window of fired days vs all other matured loans in the anchor range |
+| `rule_type` | `flag` (flag share or amount flag) or `volume` |
+| `obs_after_alert`, `def_rate_after_alert`, `def_rate_never_alerted`, `lift_after_alert` | **Forward:** matured loans in the `lift_days` (default 30) after each alert, against loans of sellers this rule never alerted, in the same period. This is the one to judge a rule by: would acting on the alert have avoided bad loans? |
+| `obs_in_window`, `def_rate_in_window`, `def_rate_outside`, `lift_in_window` | **Looking back:** matured loans inside the recent window of fired days vs all other matured loans in the anchor range. A seller that fires often covers much of its own history, so this mostly says "the alerted sellers have bad loans" |
 
 A seller is suspicious from the date of its first transaction matching the suspicious condition, or from the flagged-on date column when given. Labels are optional: without them the summary shows the workload columns only.
+
+Cooldown changes only the alert count (workload). Precision, recall and lead time use each seller's first alert, which is always its first fired day, and the in-window lift uses fired days.
 
 ## Size
 
