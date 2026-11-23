@@ -79,6 +79,25 @@ A seller is suspicious from the date of its first transaction matching the suspi
 
 Cooldown changes only the alert count (workload). Precision, recall and lead time use each seller's first alert, which is always its first fired day, and the in-window lift uses fired days.
 
+## Outcomes by q band (extra cell)
+
+`extras/fisher_q_bands_cell.py` shows whether smaller q-values go with more suspicious and defaulted transactions. Run it **after** the backtest, in the same notebook: it uses `df`, `spark`, `CONFIG` and `detail`, and gives `q_bands`.
+
+- **Bands.** For each rule, each transaction in the anchor range gets the **smallest q** among the tested seller-days whose recent window covers it, so it counts once per rule.
+  - The bands are `q 0-0.001`, `q 0.001-0.01`, `q 0.01-0.05`, `q 0.05-0.2` and `q 0.2-1.0`. Change the cut-offs in `BANDS` at the top of the file.
+  - `not in detail` holds the rest: sellers that were never tested (below `min_total` / `min_flag`) or whose share went down (q close to 1).
+- **Columns.** `seller_days`, `fired_days` and `alert_days` per band, then the same eight counts and four rates as `outcomes`. A client counts in every band where they have a transaction.
+
+```python
+q_bands[(q_bands.metric == 'high_util') & (q_bands.comparison == '7 vs 8-15')
+        & (q_bands.unit == 'customer') & (q_bands.test == 'self')]
+```
+
+**How to read it** (one rule, top band to bottom):
+- **Rates rise as q falls:** the test separates bad sellers from good. If fired rates still look low, look at the cut-off (`q_max`, `or_min`) or the gates.
+- **Rates are flat across bands:** the metric doesn't separate bad sellers from good, whatever the q. Try another metric or the peer test.
+- **`not in detail` has a high suspicious or default rate:** the bad sellers are never tested. Lower `min_total` / `min_flag`, or look at the small sellers separately.
+
 ## Size
 
 The heavy work runs in Spark, in one pass per count unit. Counting by customers repeats each (seller, customer, day) row once per anchor its windows cover, so a 90-day base window means about 90 copies. Counting by transactions is much cheaper. Only candidate rows come into pandas; above `max_rows` it stops and says what to change (raise `min_total`/`min_flag`, shorten the anchor range, or raise `max_rows`).
@@ -89,6 +108,7 @@ The heavy work runs in Spark, in one pass per count unit. Counting by customers 
 python html/fisher/build.py                 # src/ -> fisher_backtest_builder.html
 python html/fisher/tests/test_engine.py     # Fisher vs scipy; full run vs a brute-force rebuild on local Spark
 python html/fisher/tests/test_page.py       # Playwright at 1280px and 360px, then runs a downloaded .py on Spark
+python html/fisher/tests/test_q_bands.py    # the q-band cell vs a transaction-by-transaction rebuild
 ```
 
 | File | What it is |
@@ -96,5 +116,6 @@ python html/fisher/tests/test_page.py       # Playwright at 1280px and 360px, th
 | `src/engine.py` | The backtest engine, embedded unchanged in every generated file |
 | `src/ui.js`, `src/ui.css`, `src/shell.html` | The page |
 | `src/theme.js` | Ghibli misty-hills theme (copy of the SQL Run Checker's) |
+| `extras/fisher_q_bands_cell.py` | Notebook cell: outcomes by q band, run after the backtest |
 
 Edit `src/`, then rebuild. Don't edit `fisher_backtest_builder.html` by hand.
