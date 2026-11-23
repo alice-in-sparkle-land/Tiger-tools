@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fisher Backtest Builder</title>
+<style>:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1c1a;--muted:#6a6963;--line:#e3e1da;--soft:#f1efe9;--accent:#2b62d9;--accent-soft:#e8eefc;--accent2:#C99230;--err:#b4232a;--err-soft:#fbeaea;--ok:#2f7a45;--mono:ui-monospace,"Roboto Mono",SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--panel:#1d1d1b;--ink:#ecebe5;--muted:#9d9b93;--line:#34332f;--soft:#262623;--accent:#7ea6ff;--accent-soft:#1e2a45;--err:#ff8a8a;--err-soft:#3a1c1c;--ok:#8fd3a5}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,Roboto,-apple-system,"Segoe UI",sans-serif}
+code,pre{font-family:var(--mono);font-size:12.5px}
+code{background:var(--soft);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+button,select{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 11px;border-radius:7px;cursor:pointer}
+button:hover{border-color:var(--accent)}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.wide{width:100%;margin-top:4px}
+button.x{padding:2px 9px;font-size:12px}
+.in{font:inherit;width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:7px;padding:7px 9px;margin-top:3px}
+.in.bad{border-color:var(--err);background:var(--err-soft)}
+.muted{color:var(--muted)}.hidden{display:none!important}
+.hero{position:relative;height:200px;overflow:hidden;border-radius:0 0 18px 18px;background:var(--soft)}
+.scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+.hero-t{position:absolute;left:22px;right:22px;top:22px;color:#1E2733;max-width:560px}
+.hero-t h1{font-family:"Noto Serif",Georgia,serif;font-size:26px;margin:0 0 4px;font-weight:600}
+.hero-t p{margin:0;font-size:14px;opacity:.85}
+.sky-dark .hero-t{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+main{max-width:820px;margin:0 auto 8vh;padding:14px 14px 0}
+.lrow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin:0 0 12px;font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:0 0 12px}
+.card h2{font-size:16px;margin:0 0 6px;font-family:"Noto Serif",Georgia,serif}
+.card h2 .muted{font-family:system-ui,sans-serif;font-size:13px;font-weight:400}
+.hint{font-size:12.5px;color:var(--muted);margin:4px 0 10px}
+.sub{font-weight:600;font-size:13px;margin:12px 0 6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.grid.g3{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.grid label{font-size:12.5px;color:var(--muted);min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;background:var(--panel);font-size:13px;cursor:pointer;user-select:none}
+.chip input{margin:0;accent-color:var(--accent)}
+.item{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:9px;padding:10px 12px;margin:0 0 8px;background:var(--bg)}
+.ihead{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ihead .in{flex:1 1 140px;margin:0}
+.ihead select{flex:0 0 auto}
+.irow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:13px}
+.irow .in{margin:0}
+.num{width:64px!important;flex:0 0 64px;text-align:center}
+.cmp{border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin:0 0 8px;font-size:13px;background:var(--bg)}
+.chead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.cmp .name{font-weight:600}
+.wins{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:6px}
+.win{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.win .wl{min-width:46px;color:var(--muted)}
+.win .in{margin:0}
+.err{color:var(--err);font-size:12.5px;margin-top:4px}
+.errs{background:var(--err-soft);border:1px solid var(--err);color:var(--err);border-radius:9px;padding:8px 12px;font-size:13px;margin:0 0 8px}
+.errs ul{margin:4px 0 0;padding-left:18px}
+.out{border-color:var(--accent)}
+.ohead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.ohead h2{margin:0}.btns{display:flex;gap:6px}
+#code{background:var(--soft);border-radius:8px;padding:10px;margin:0;max-height:420px;overflow:auto;white-space:pre;font-size:12px;line-height:1.5}
+.foot{font-size:12.5px;text-align:center}
+.banner{position:sticky;top:0;z-index:30;background:var(--accent);color:#fff;padding:8px 16px;font-size:13px;text-align:center}.banner.err{background:var(--err)}
+.sheet{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center;padding:16px}
+.sheet .card{width:100%;max-width:520px;margin:0}
+.sheet h3{margin:0 0 8px}
+.row-end{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.themeSel{padding:4px 6px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="banner" class="banner hidden"></div>
+<div class="hero"><img class="scene" alt=""><div class="hero-t"><h1>Fisher Backtest Builder</h1><p>Declare the columns and rules. Get one .py that backtests them on your data.</p></div></div>
+<main>
+  <div class="lrow"><span><button class="impSet">Import settings</button> <button class="expSet">Export settings</button> <button id="reset">Reset</button></span><label class="muted">Theme <select class="themeSel"></select></label></div>
+
+  <section class="card">
+    <h2>1. Columns in <code>df</code></h2>
+    <p class="hint"><code>df</code> is your transaction-level Spark DataFrame, one row per transaction. Don't aggregate it first.</p>
+    <div class="grid">
+      <label>Date<input class="in" data-k="cols.date"></label>
+      <label>Seller<input class="in" data-k="cols.merchant"></label>
+      <label>Customer<input class="in" data-k="cols.customer"></label>
+      <label>Amount <span class="muted">(for amount flags)</span><input class="in" data-k="cols.amount"></label>
+    </div>
+    <div class="sub">Count by</div>
+    <div class="chips">
+      <label class="chip"><input type="checkbox" data-k="units.customer"> Distinct customers</label>
+      <label class="chip"><input type="checkbox" data-k="units.txn"> Transactions</label>
+    </div>
+    <p class="hint">Customers: a person counts once, however many times they pay (the safer test). Transactions: every payment counts, which also catches a few customers paying many times. Tick both to compare them in the backtest.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Metrics</h2>
+    <p class="hint"><b>Flag share</b>: any SQL condition on a transaction. <b>Amount flag</b>: amount above or below a value. <b>Volume</b>: the seller's share of all transactions (self test) or of its peer group (peer test).</p>
+    <div id="metrics"></div>
+    <button id="addMetric" class="wide">+ Add metric</button>
+  </section>
+
+  <section class="card">
+    <h2>3. Comparisons</h2>
+    <p class="hint">Days counted back from each anchor day; day 1 is the anchor itself. Every day in the data is an anchor (rolling backtest).</p>
+    <div id="comps"></div>
+    <button id="addComp" class="wide">+ Add comparison</button>
+    <div class="sub">Anchor range <span class="muted">(optional)</span></div>
+    <div class="grid">
+      <label>From<input class="in" data-k="anchor.start" placeholder="first possible day"></label>
+      <label>To<input class="in" data-k="anchor.end" placeholder="last day in df"></label>
+    </div>
+    <label class="chip" style="margin-top:8px"><input type="checkbox" data-k="anchor.skipLast"> Skip the last day in <code>df</code> (partly loaded)</label>
+  </section>
+
+  <section class="card">
+    <h2>4. Peer check</h2>
+    <label class="chip"><input type="checkbox" data-k="peer.on"> Compare each seller with its peers</label>
+    <div class="grid" style="margin-top:8px">
+      <label>Peer group columns<input class="in" data-k="peer.cols" placeholder="seller_group, h3_9"></label>
+      <label>Min other sellers<input class="in" data-k="peer.min" inputmode="numeric"></label>
+    </div>
+    <p class="hint">Peers = the other sellers with the same values in these columns, in the same recent window. The seller itself is always left out. Counting by customers, its own customers are left out of the peer row too, so the two rows never share a person.</p>
+  </section>
+
+  <section class="card">
+    <h2>5. Labels <span class="muted">(optional)</span></h2>
+    <p class="hint">Transaction level. Leave blank to skip precision, recall and default lift.</p>
+    <div class="grid">
+      <label>Suspicious (SQL condition)<input class="in" data-k="labels.susp" placeholder="f_suspicious = 1"></label>
+      <label>Flagged-on date column<input class="in" data-k="labels.suspDate" placeholder="blank = transaction date"></label>
+      <label>Default column (0/1)<input class="in" data-k="labels.def" placeholder="f_pd30"></label>
+      <label>Observed column (0/1)<input class="in" data-k="labels.obs" placeholder="f_pd30_obs"></label>
+    </div>
+    <p class="hint">A seller is suspicious from the date of its first suspicious transaction (or the flagged-on date). Default lift compares matured loans inside alert windows with all other matured loans.</p>
+  </section>
+
+  <section class="card">
+    <h2>6. Trigger rule</h2>
+    <div class="grid g3">
+      <label>q-value ≤<input class="in" data-k="rule.q" inputmode="decimal"></label>
+      <label>Odds ratio ≥<input class="in" data-k="rule.or" inputmode="decimal"></label>
+      <label>Cooldown days<input class="in" data-k="rule.cooldown" inputmode="numeric"></label>
+      <label>Min recent total<input class="in" data-k="rule.minTotal" inputmode="numeric"></label>
+      <label>Min flagged<input class="in" data-k="rule.minFlag" inputmode="numeric"></label>
+      <label>Max rows to pandas<input class="in" data-k="rule.maxRows" inputmode="numeric"></label>
+    </div>
+    <p class="hint">A test runs when the seller has at least <i>min recent total</i> in the recent window and at least <i>min flagged</i> flagged (for volume: its own count). It fires when q (Benjamini–Hochberg over all sellers that day) and the odds ratio both pass. One-sided: only increases fire.</p>
+  </section>
+
+  <section class="card out" id="out">
+    <div class="ohead"><h2>Generated .py</h2><span class="btns"><button id="copy">Copy</button><button class="primary" id="dl">Download .py</button></span></div>
+    <div id="errs"></div>
+    <p class="hint">Paste it into a notebook cell where <code>spark</code> and <code>df</code> exist, or run <code>exec(open(path).read())</code>. It ends with <code>detail, summary</code>.</p>
+    <pre id="code"></pre>
+  </section>
+  <p class="muted foot">Works offline. Your settings are saved in this browser; use Export settings to keep a copy.</p>
+</main>
+<input type="file" id="setIn" accept=".json,application/json" hidden>
+<div id="sheet" class="sheet hidden"><div class="card" id="sheetc"></div></div>
+<script>
+'use strict';
+const ENGINE="# ============================================================================\n# Engine (generated by html/fisher; edit the page, not this code)\n# ============================================================================\nimport math, time\nimport numpy as np\nimport pandas as pd\n\nDEFAULTS = {\n    'units':        ['customer', 'txn'],   # count by distinct customers, by transactions, or both\n    'peer_cols':    [],                    # e.g. ['seller_group', 'h3_9']; [] = no peer test\n    'min_peers':    3,                     # other sellers needed in the peer group\n    'anchor_start': None,                  # 'YYYY-MM-DD'; None = first day with every window inside the data\n    'anchor_end':   None,                  # 'YYYY-MM-DD'; None = last day in df\n    'skip_last_day': False,                # True: drop the last day in df (partly loaded)\n    'min_total':    10,                    # recent-window count needed (seller, and peers)\n    'min_flag':     5,                     # flagged count needed in the recent window (volume: seller count)\n    'q_max':        0.05,                  # Benjamini-Hochberg q-value to fire\n    'or_min':       2.0,                   # odds ratio needed to fire\n    'cooldown':     7,                     # days before the same rule can alert the same seller again\n    'max_rows':     3_000_000,             # most test rows brought into pandas\n    'susp_cond':    None,                  # SQL condition marking a suspicious transaction\n    'susp_date_col': None,                 # optional: date the flag was raised (else the transaction date)\n    'def_col':      None,                  # 0/1 default flag per transaction\n    'obs_col':      None,                  # 0/1 observed (matured) flag per transaction\n}\n\n\ndef _log(msg):\n    print(msg, flush=True)\n\n\n# ---------------------------------------------------------------------------- Fisher\ndef _logfact_fn(max_n):\n    \"\"\"log(n!) as a vectorised lookup (table up to max_n), exact to ~1e-9.\"\"\"\n    max_n = int(max_n)\n    if max_n <= 50_000_000:\n        tab = np.zeros(max_n + 2)\n        tab[2:] = np.cumsum(np.log(np.arange(2, max_n + 2, dtype=float)))\n        return lambda x: tab[np.asarray(x, dtype=np.int64)]\n    lg = np.frompyfunc(lambda v: math.lgamma(v + 1.0), 1, 1)\n    return lambda x: np.asarray(lg(np.asarray(x, dtype=float)), dtype=float)\n\n\ndef fisher_greater(a, b, c, d):\n    \"\"\"One-sided Fisher exact test, alternative 'greater', for 2x2 tables [[a, b], [c, d]].\n\n    p = P(X >= a), X hypergeometric with the table margins fixed. Same as\n    scipy.stats.fisher_exact(table, alternative='greater'). Vectorised over arrays.\"\"\"\n    a, b, c, d = (np.asarray(v, dtype=np.int64) for v in (a, b, c, d))\n    n_rows = a.size\n    p = np.ones(n_rows)\n    if n_rows == 0:\n        return p\n    N, K, n = a + b + c + d, a + c, a + b                  # population, successes, draws\n    lo, hi = np.maximum(0, n + K - N), np.minimum(n, K)\n    lf = _logfact_fn(N.max())\n    lc = lambda x, y: lf(x) - lf(y) - lf(x - y)\n    mode = np.floor((n + 1.0) * (K + 1.0) / (N + 2.0)).astype(np.int64)\n\n    def logpmf(x, i):\n        return lc(K[i], x) + lc(N[i] - K[i], n[i] - x) - lc(N[i], n[i])\n\n    up = a > mode                                          # tail above the mode: sum upward from a\n    idx = np.where(up)[0]\n    if idx.size:\n        j = a[idx].copy(); term = np.ones(idx.size); tot = np.ones(idx.size)\n        Ki, ni, Ni, hii = K[idx], n[idx], N[idx], hi[idx]\n        act = np.arange(idx.size)\n        while act.size:\n            jj = j[act]\n            r = (Ki[act] - jj) * (ni[act] - jj) / ((jj + 1.0) * (Ni[act] - Ki[act] - ni[act] + jj + 1.0))\n            r = np.where(jj >= hii[act], 0.0, r)\n            term[act] *= r; tot[act] += term[act]; j[act] += 1\n            act = act[(term[act] > 1e-17 * tot[act]) & (j[act] < hii[act])]\n        p[idx] = np.exp(logpmf(a[idx], idx)) * tot\n    idx = np.where(~up & (a - 1 >= lo))[0]                 # otherwise p = 1 - P(X <= a-1): sum downward\n    if idx.size:\n        j = a[idx] - 1; term = np.ones(idx.size); tot = np.ones(idx.size)\n        Ki, ni, Ni, loi = K[idx], n[idx], N[idx], lo[idx]\n        act = np.arange(idx.size)\n        while act.size:\n            jj = j[act]\n            r = jj * (Ni[act] - Ki[act] - ni[act] + jj) / ((Ki[act] - jj + 1.0) * (ni[act] - jj + 1.0))\n            r = np.where(jj <= loi[act], 0.0, r)\n            term[act] *= r; tot[act] += term[act]; j[act] -= 1\n            act = act[(term[act] > 1e-17 * tot[act]) & (j[act] > loi[act])]\n        p[idx] = 1.0 - np.exp(logpmf(a[idx] - 1, idx)) * tot\n    return np.clip(p, 0.0, 1.0)\n\n\ndef odds_ratio(a, b, c, d):\n    \"\"\"Odds ratio with 0.5 added to every cell, and its 95% (Woolf) interval.\"\"\"\n    a, b, c, d = (np.asarray(v, dtype=float) + 0.5 for v in (a, b, c, d))\n    o = a * d / (b * c)\n    se = np.sqrt(1 / a + 1 / b + 1 / c + 1 / d)\n    return o, np.exp(np.log(o) - 1.96 * se), np.exp(np.log(o) + 1.96 * se)\n\n\ndef bh_qvalues(p, n_family):\n    \"\"\"Benjamini-Hochberg q-values for p (one family) when the family has n_family tests in all.\n    Tests left out of p all have larger p-values, so the ranks below them are unchanged.\"\"\"\n    p = np.asarray(p, dtype=float)\n    if p.size == 0:\n        return p\n    order = np.argsort(p, kind='mergesort')\n    ranks = np.arange(1, p.size + 1)\n    q = p[order] * float(n_family) / ranks\n    q = np.minimum.accumulate(q[::-1])[::-1]\n    out = np.empty_like(q); out[order] = np.minimum(q, 1.0)\n    return out\n\n\n# ---------------------------------------------------------------------------- Spark counts\ndef _windows(comparisons):\n    \"\"\"Distinct day windows (start, end) used by all comparisons; day 1 = the anchor day.\"\"\"\n    ws = []\n    for cmp_ in comparisons:\n        for w in (tuple(cmp_['recent']), tuple(cmp_['base'])):\n            if w not in ws:\n                ws.append(w)\n    return ws\n\n\ndef _spark_counts(base, unit, metrics, wins, peer, a_start, a_end, spark):\n    \"\"\"Counts per seller x anchor day x window: n (total), f_<k> (flagged) for each flag metric,\n    the same for peers (seller excluded), and the all-seller total. One DataFrame, not collected.\"\"\"\n    from pyspark.sql import functions as F\n    flags = [m['name'] for m in metrics if m['kind'] == 'flag']\n    W = spark.createDataFrame([(i, int(s), int(e)) for i, (s, e) in enumerate(wins)], 'w int, ws int, we int')\n    if unit == 'customer':\n        r0 = base.groupBy('_g', '_m', '_c', '_d').agg(*[F.max('_f_' + k).alias('_f_' + k) for k in flags])\n    else:\n        r0 = base.groupBy('_g', '_m', '_d').agg(F.count(F.lit(1)).alias('_n'),\n                                                *[F.sum('_f_' + k).alias('_f_' + k) for k in flags])\n    lo = F.greatest(F.expr('date_add(_d, ws - 1)'), F.lit(a_start).cast('date'))\n    hi = F.least(F.expr('date_add(_d, we - 1)'), F.lit(a_end).cast('date'))\n    x = (r0.crossJoin(F.broadcast(W)).withColumn('_lo', lo).withColumn('_hi', hi)\n         .where(F.col('_lo') <= F.col('_hi'))\n         .withColumn('_t', F.explode(F.sequence('_lo', '_hi'))).drop('_lo', '_hi', 'ws', 'we', '_d'))\n    key = ['_g', '_m', '_t', 'w']\n    cached = []\n    if unit == 'customer':\n        A = x.groupBy('_g', '_m', '_c', '_t', 'w').agg(*[F.max('_f_' + k).alias('_f_' + k) for k in flags]).persist()\n        cached.append(A)\n        M = A.groupBy(*key).agg(F.count(F.lit(1)).alias('n'), *[F.sum('_f_' + k).alias('f_' + k) for k in flags])\n        tot = A.select('_c', '_t', 'w').distinct().groupBy('_t', 'w').agg(F.count(F.lit(1)).alias('all_n'))\n        if peer:\n            C = A.groupBy('_g', '_c', '_t', 'w').agg(*[F.max('_f_' + k).alias('_cf_' + k) for k in flags])\n            G = C.groupBy('_g', '_t', 'w').agg(F.count(F.lit(1)).alias('g_n'),\n                                              *[F.sum('_cf_' + k).alias('g_f_' + k) for k in flags])\n            X = (A.select('_g', '_m', '_c', '_t', 'w').join(C, ['_g', '_c', '_t', 'w'])\n                 .groupBy(*key).agg(*[F.sum('_cf_' + k).alias('x_' + k) for k in flags]))\n    else:\n        M = x.groupBy(*key).agg(F.sum('_n').alias('n'), *[F.sum('_f_' + k).alias('f_' + k) for k in flags])\n        tot = M.groupBy('_t', 'w').agg(F.sum('n').alias('all_n'))\n        if peer:\n            G = M.groupBy('_g', '_t', 'w').agg(F.sum('n').alias('g_n'),\n                                              *[F.sum('f_' + k).alias('g_f_' + k) for k in flags])\n    out = M.join(tot, ['_t', 'w'])\n    if peer:\n        nm = M.groupBy('_g', '_t', 'w').agg(F.count(F.lit(1)).alias('g_m'))\n        out = out.join(G, ['_g', '_t', 'w']).join(nm, ['_g', '_t', 'w'])\n        if unit == 'customer':\n            # peers = customers in the group who did NOT buy from this seller in the window (disjoint rows)\n            out = out.join(X, key, 'left')\n            sel = [(F.col('g_f_' + k) - F.coalesce(F.col('x_' + k), F.lit(0))).alias('p_f_' + k) for k in flags]\n        else:\n            sel = [(F.col('g_f_' + k) - F.col('f_' + k)).alias('p_f_' + k) for k in flags]\n        out = out.select(*key, 'n', *['f_' + k for k in flags], 'all_n',\n                         (F.col('g_n') - F.col('n')).alias('p_n'), (F.col('g_m') - 1).alias('p_m'), *sel)\n    return out, cached\n\n\ndef _spark_tests(counts, unit, metrics, comparisons, wins, peer, cfg, spark):\n    \"\"\"One row per seller x anchor x metric x comparison x test with the 2x2 table a, b, c, d.\n    One join for all comparisons, then one explode over metrics x tests (no unions).\"\"\"\n    from pyspark.sql import functions as F\n    flags = [m['name'] for m in metrics if m['kind'] == 'flag']\n    cols = ['n', 'all_n'] + ['f_' + k for k in flags] + (['p_n', 'p_m'] + ['p_f_' + k for k in flags] if peer else [])\n    cmp_df = spark.createDataFrame([(c['name'], wins.index(tuple(c['recent'])), wins.index(tuple(c['base'])))\n                                    for c in comparisons], 'comparison string, wr int, wb int')\n    R = counts.join(F.broadcast(cmp_df), counts['w'] == cmp_df['wr']).select(\n        '_g', '_m', '_t', 'comparison', 'wb', *[F.col(c).alias('r_' + c) for c in cols])\n    B = counts.select('_g', '_m', '_t', F.col('w').alias('wb'), *[F.col(c).alias('b_' + c) for c in cols])\n    Ball = counts.select('_t', F.col('w').alias('wb'), F.col('all_n').alias('ball')).distinct()\n    J = R.join(B, ['_g', '_m', '_t', 'wb'], 'left').join(Ball, ['_t', 'wb'], 'left')\n    z = lambda c: F.coalesce(F.col(c), F.lit(0)).cast('long')\n    nr, nb = z('r_n'), z('b_n')\n    none = F.lit(None).cast('long')\n    items = []\n    for m in metrics:\n        k = m['name']\n        if m['kind'] == 'flag':\n            fr, fb = z('r_f_' + k), z('b_f_' + k)\n            items.append((k, 'self', fr, nr - fr, fb, nb - fb, fr, none))\n            if peer:\n                pf, pn = z('r_p_f_' + k), z('r_p_n')\n                items.append((k, 'peer', fr, nr - fr, pf, pn - pf, fr, z('r_p_m')))\n        else:  # volume: seller vs everyone else (self) or vs its peers (peer), recent vs base\n            items.append((k, 'self', nr, z('r_all_n') - nr, nb, z('ball') - nb, nr, none))\n            if peer:\n                items.append((k, 'peer', nr, z('r_p_n'), nb, z('b_p_n'), nr, z('r_p_m')))\n    structs = []\n    for k, test, a, b, c, d, flagged, pm in items:\n        gate = (nr >= cfg['min_total']) & (flagged >= cfg['min_flag'])\n        if test == 'peer':\n            gate = gate & (pm >= cfg['min_peers']) & (z('r_p_n') >= cfg['min_total'])\n        structs.append(F.when(gate, F.struct(F.lit(k).alias('metric'), F.lit(test).alias('test'),\n                                             a.alias('a'), b.alias('b'), c.alias('c'), d.alias('d'),\n                                             pm.alias('peer_sellers'))))\n    x = J.select(F.col('_t').alias('anchor'), F.col('_m').alias('merchant'), F.col('_g').alias('peer_group'),\n                 'comparison', F.explode(F.array(*structs)).alias('s')).where(F.col('s').isNotNull())\n    return x.select('anchor', 'merchant', 'peer_group', 's.metric', 'comparison', F.lit(unit).alias('unit'),\n                    's.test', 's.a', 's.b', 's.c', 's.d', 's.peer_sellers')\n\n\n# ---------------------------------------------------------------------------- pandas steps\ndef _alerts(det, cooldown):\n    \"\"\"alert = a fired day at least `cooldown` days after this rule last alerted this seller.\"\"\"\n    det['alert'] = False\n    f = det[det['fired']].sort_values('anchor')\n    keys = ['merchant', 'metric', 'comparison', 'unit', 'test']\n    keep = []\n    for _, g in f.groupby(keys, sort=False):\n        last = None\n        for i, t in zip(g.index, g['anchor']):\n            if last is None or (t - last).days >= cooldown:\n                keep.append(i); last = t\n    det.loc[keep, 'alert'] = True\n    return det\n\n\ndef _summary(det, fam, n_days, comparisons, susp, loans, a_start, a_end):\n    keys = ['metric', 'comparison', 'unit', 'test']\n    rec = {c['name']: tuple(c['recent']) for c in comparisons}\n    tests = fam.groupby(keys)['n_tests'].sum()\n    rows = []\n    for k, g in det.groupby(keys, sort=False):\n        fired, al = g[g['fired']], g[g['alert']]\n        r = dict(zip(keys, k))\n        r.update(tests=int(tests.get(k, 0)), fired=len(fired), alerts=len(al),\n                 alerts_per_day=round(len(al) / max(n_days, 1), 2), sellers_alerted=al['merchant'].nunique())\n        if susp is not None:\n            first = al.groupby('merchant')['anchor'].min()\n            known = susp.dropna()\n            hit = first.index.isin(known.index)\n            r['precision'] = round(hit.mean(), 3) if len(first) else np.nan\n            target = known[(known >= a_start) & (known <= a_end)]\n            caught = first.reindex(target.index).dropna()\n            r['susp_in_range'] = len(target)\n            r['recall'] = round(len(caught) / len(target), 3) if len(target) else np.nan\n            lead = (target.reindex(caught.index) - caught).dt.days\n            r['recall_early'] = round((lead >= 0).sum() / len(target), 3) if len(target) else np.nan\n            r['median_lead_days'] = float(lead.median()) if len(lead) else np.nan\n        if loans is not None:\n            s, e = rec[k[1]]\n            cov = []\n            for m_, t in zip(fired['merchant'], fired['anchor']):\n                for back in range(s, e + 1):\n                    cov.append((m_, t - pd.Timedelta(days=back - 1)))\n            cov = pd.DataFrame(cov, columns=['merchant', 'day']).drop_duplicates()\n            cov['_cov'] = True\n            L = loans.merge(cov, on=['merchant', 'day'], how='left')\n            L['_cov'] = L['_cov'].fillna(False).astype(bool)\n            a_, o_ = L[L['_cov']], L[~L['_cov']]\n            ra = a_['def_n'].sum() / a_['obs_n'].sum() if a_['obs_n'].sum() else np.nan\n            ro = o_['def_n'].sum() / o_['obs_n'].sum() if o_['obs_n'].sum() else np.nan\n            r.update(obs_alerted=int(a_['obs_n'].sum()), def_rate_alerted=round(ra, 4) if ra == ra else np.nan,\n                     def_rate_other=round(ro, 4) if ro == ro else np.nan,\n                     default_lift=round(ra / ro, 2) if ro and ra == ra and ro == ro else np.nan)\n        rows.append(r)\n    for k in tests.index:                               # rules that never had a candidate row\n        if not any(all(r[c] == v for c, v in zip(keys, k)) for r in rows):\n            rows.append(dict(zip(keys, k), tests=int(tests[k]), fired=0, alerts=0, alerts_per_day=0.0, sellers_alerted=0))\n    out = pd.DataFrame(rows)\n    sort = [c for c in ['precision', 'recall', 'alerts'] if c in out.columns]\n    return out.sort_values(sort, ascending=False, na_position='last').reset_index(drop=True)\n\n\n# ---------------------------------------------------------------------------- main\ndef run_fisher_backtest(df, config, spark=None):\n    \"\"\"Rolling backtest of Fisher-test triggers. Every day in the anchor range plays 'today'.\n\n    Returns a dict: ok, detail (pandas: one row per tested seller x day x rule), summary\n    (pandas: one row per rule), failed_step and error when it stopped.\"\"\"\n    from pyspark.sql import functions as F\n    cfg = dict(DEFAULTS); cfg.update(config or {})\n    spark = spark or df.sparkSession\n    metrics, comparisons = cfg['metrics'], cfg['comparisons']\n    peer = bool(cfg['peer_cols'])\n    units = list(cfg['units'])\n    steps = ['check_inputs', 'anchor_range'] + ['spark_tests_' + u for u in units] + \\\n            ['fisher_and_q', 'alerts', 'spark_labels', 'summary']\n    res = {'ok': False, 'detail': None, 'summary': None, 'failed': []}\n    st = {}\n    t0 = time.time()\n\n    def step(i, name, fn):\n        _log(f\"[{i}/{len(steps)}] {name} ...\")\n        t = time.time()\n        out = fn()\n        _log(f\"      done in {time.time() - t:.1f}s\")\n        return out\n\n    def check():\n        need = [cfg['date_col'], cfg['merchant_col'], cfg['customer_col']] + list(cfg['peer_cols'])\n        miss = [c for c in need if c not in df.columns]\n        if miss:\n            raise ValueError(f\"columns not in df: {', '.join(miss)}\")\n        names = [m['name'] for m in metrics]\n        if len(set(names)) != len(names):\n            raise ValueError('metric names must be unique')\n        for cmp_ in comparisons:\n            (s1, e1), (s2, e2) = cmp_['recent'], cmp_['base']\n            if not (1 <= s1 <= e1 and 1 <= s2 <= e2):\n                raise ValueError(f\"comparison {cmp_['name']}: windows need 1 <= start <= end\")\n        exprs = [m['expr'] for m in metrics if m['kind'] == 'flag']\n        if cfg['susp_cond']:\n            exprs.append(cfg['susp_cond'])\n        for c in [cfg['susp_date_col'], cfg['def_col'], cfg['obs_col']]:\n            if c and c not in df.columns:\n                raise ValueError(f\"column not in df: {c}\")\n        for e in exprs:\n            df.limit(0).select(F.expr(e)).schema   # raises if the SQL condition does not parse\n        g = F.concat_ws(' | ', *[F.coalesce(F.col(c).cast('string'), F.lit('(null)')) for c in cfg['peer_cols']]) \\\n            if peer else F.lit('all')\n        st['base'] = df.select(\n            F.to_date(F.col(cfg['date_col'])).alias('_d'), F.col(cfg['merchant_col']).cast('string').alias('_m'),\n            F.col(cfg['customer_col']).cast('string').alias('_c'), g.alias('_g'),\n            *[F.when(F.expr(m['expr']), 1).otherwise(0).alias('_f_' + m['name']) for m in metrics if m['kind'] == 'flag']\n        ).where(F.col('_d').isNotNull() & F.col('_m').isNotNull())\n\n    def anchors():\n        r = st['base'].agg(F.min('_d').alias('lo'), F.max('_d').alias('hi')).collect()[0]\n        if r['lo'] is None:\n            raise ValueError('df has no rows with a date and a seller')\n        lo, hi = pd.Timestamp(r['lo']), pd.Timestamp(r['hi'])\n        if cfg['skip_last_day']:\n            hi -= pd.Timedelta(days=1)\n        max_back = max(max(c['recent'][1], c['base'][1]) for c in comparisons)\n        a_s = pd.Timestamp(cfg['anchor_start']) if cfg['anchor_start'] else lo + pd.Timedelta(days=max_back - 1)\n        a_e = min(pd.Timestamp(cfg['anchor_end']), hi) if cfg['anchor_end'] else hi\n        if a_s > a_e:\n            raise ValueError(f\"no anchor days: data {lo.date()} to {hi.date()}, the longest window needs \"\n                             f\"{max_back} days, so anchors would start {a_s.date()}\")\n        st['a_s'], st['a_e'] = a_s, a_e\n        st['n_days'] = (a_e - a_s).days + 1\n        _log(f\"      data {lo.date()} to {hi.date()}; anchors {a_s.date()} to {a_e.date()} ({st['n_days']} days)\")\n\n    def tests_for(unit):\n        def run():\n            wins = _windows(comparisons)\n            cnt, cached = _spark_counts(st['base'], unit, metrics, wins, peer, str(st['a_s'].date()), str(st['a_e'].date()), spark)\n            cnt = cnt.persist()\n            t = _spark_tests(cnt, unit, metrics, comparisons, wins, peer, cfg, spark).persist()\n            fam = t.groupBy('anchor', 'metric', 'comparison', 'unit', 'test').agg(F.count(F.lit(1)).alias('n_tests')).toPandas()\n            # only rows leaning the suspicious way (a*d > b*c) can reach a small p; the rest stay in the family count\n            cand = t.where(F.col('a') * F.col('d') > F.col('b') * F.col('c'))\n            n = cand.count()\n            if n + sum(len(v) for v in st.get('det', [])) > cfg['max_rows']:\n                raise ValueError(f\"{n:,} candidate rows for unit={unit} is over max_rows={cfg['max_rows']:,}. \"\n                                 f\"Raise min_total/min_flag, shorten the anchor range, or raise max_rows\")\n            pdf = cand.toPandas()\n            t.unpersist(); cnt.unpersist()\n            for c_ in cached:\n                c_.unpersist()\n            st.setdefault('det', []).append(pdf); st.setdefault('fam', []).append(fam)\n            _log(f\"      {int(fam['n_tests'].sum()):,} tests, {n:,} leaning up (kept)\")\n        return run\n\n    def fisher():\n        det = pd.concat(st['det'], ignore_index=True)\n        fam = pd.concat(st['fam'], ignore_index=True)\n        det['anchor'] = pd.to_datetime(det['anchor']); fam['anchor'] = pd.to_datetime(fam['anchor'])\n        for c in 'abcd':\n            det[c] = det[c].astype(np.int64)\n        det['share_recent'] = det['a'] / (det['a'] + det['b']).where(lambda s: s > 0)\n        det['share_ref'] = det['c'] / (det['c'] + det['d']).where(lambda s: s > 0)\n        det['odds_ratio'], det['or_lo'], det['or_hi'] = odds_ratio(det['a'], det['b'], det['c'], det['d'])\n        det['p'] = fisher_greater(det['a'], det['b'], det['c'], det['d'])\n        keys = ['anchor', 'metric', 'comparison', 'unit', 'test']\n        det = det.merge(fam, on=keys, how='left')\n        det['q'] = np.nan\n        for _, idx in det.groupby(keys).groups.items():\n            det.loc[idx, 'q'] = bh_qvalues(det.loc[idx, 'p'].values, det.loc[idx[0], 'n_tests'])\n        det['fired'] = (det['q'] <= cfg['q_max']) & (det['odds_ratio'] >= cfg['or_min'])\n        st['detail'], st['fam'] = det, fam\n        _log(f\"      {int(det['fired'].sum()):,} fired\")\n\n    def alerts():\n        st['detail'] = _alerts(st['detail'], int(cfg['cooldown']))\n        _log(f\"      {int(st['detail']['alert'].sum()):,} alerts after the {cfg['cooldown']}-day cooldown\")\n\n    def labels():\n        st['susp'] = st['loans'] = None\n        m = F.col(cfg['merchant_col']).cast('string')\n        if cfg['susp_cond']:\n            dt = F.to_date(F.col(cfg['susp_date_col'])) if cfg['susp_date_col'] else F.to_date(F.col(cfg['date_col']))\n            s = (df.where(F.expr(cfg['susp_cond'])).groupBy(m.alias('merchant'))\n                 .agg(F.min(dt).alias('susp_date')).toPandas())\n            st['susp'] = pd.to_datetime(s.set_index('merchant')['susp_date'])\n            _log(f\"      {len(s):,} suspicious sellers\")\n        if cfg['def_col'] and cfg['obs_col']:\n            d = F.to_date(F.col(cfg['date_col']))\n            l = (df.where(F.col(cfg['obs_col']).cast('int') == 1)\n                 .where(d.between(str(st['a_s'].date() - pd.Timedelta(days=0)), str(st['a_e'].date())))\n                 .groupBy(m.alias('merchant'), d.alias('day'))\n                 .agg(F.count(F.lit(1)).alias('obs_n'), F.sum(F.col(cfg['def_col']).cast('int')).alias('def_n')).toPandas())\n            l['day'] = pd.to_datetime(l['day'])\n            st['loans'] = l\n            _log(f\"      {int(l['obs_n'].sum()):,} observed loans in the anchor range\")\n\n    def summary():\n        st['summary'] = _summary(st['detail'], st['fam'], st['n_days'], comparisons, st['susp'], st['loans'],\n                                 st['a_s'], st['a_e'])\n        cols = ['anchor', 'merchant', 'peer_group', 'metric', 'comparison', 'unit', 'test', 'a', 'b', 'c', 'd',\n                'share_recent', 'share_ref', 'odds_ratio', 'or_lo', 'or_hi', 'p', 'q', 'n_tests', 'peer_sellers',\n                'fired', 'alert']\n        st['detail'] = st['detail'][cols].sort_values(['anchor', 'p']).reset_index(drop=True)\n\n    fns = [check, anchors] + [tests_for(u) for u in units] + [fisher, alerts, labels, summary]\n    for i, (name, fn) in enumerate(zip(steps, fns), 1):\n        try:\n            step(i, name, fn)\n        except Exception as e:\n            first = (str(e).strip().splitlines() or [type(e).__name__])[0]\n            _log(f\"\\nFAILED at step {i}/{len(steps)}: {name}: {first}\")\n            rest = steps[i:]\n            if rest:\n                _log(f\"  not run: {', '.join(rest)}\")\n            res.update(failed_step=name, error=str(e), failed=[name])\n            return res\n    res.update(ok=True, detail=st['detail'], summary=st['summary'])\n    _log(f\"\\nDone in {time.time() - t0:.0f}s: {len(st['detail']):,} detail rows, {len(st['summary'])} rules.\")\n    return res\n";
+/* ================= Theme (Ghibli misty hills) ================= */
+const THEMES={
+  earth:{sky:['#EBC9A0','#F7E9D4'],ridges:['#E2B88E','#CF946A','#B0704C','#7E4A33'],sun:'#C8452C',acc:'#B0532A',acc2:'#C99230'},
+  forest:{sky:['#C9DFCB','#EFF4E7'],ridges:['#AECBA8','#84AC82','#5C8C61','#3B6948'],sun:'#FFFDF4',acc:'#3B7A4D',acc2:'#C6613A'},
+  sea:{sky:['#B8DCE8','#EDF6F4'],ridges:['#A3CEDC','#74B2C8','#4690B0','#256A8C'],sun:'#FFFFFF',acc:'#1D7898',acc2:'#E0784E'},
+  wind:{sky:['#CFDBF0','#F4F2F8'],ridges:['#C3CEE6','#A6B4D7','#8894C2','#6772A6'],sun:'#FFFFFF',acc:'#4569B3',acc2:'#D9A32E'}
+};
+const PHASES={dawn:{sky:['#EDB9AC','#FAE3CF'],tint:'#F2B3A0',k:.22},dusk:{sky:['#D98A7E','#F4C9A6'],tint:'#6A3E62',k:.42},night:{sky:['#16203D','#34406A'],tint:'#111933',k:.66}};
+const TKEY='fisher.theme';
+function phaseNow(d){const h=(d||new Date()).getHours();return h>=5&&h<8?'dawn':h>=16&&h<19?'dusk':(h>=19||h<5)?'night':'day';}
+function mix(a,b,k){const p=x=>[1,3,5].map(i=>parseInt(x.slice(i,i+2),16));const A=p(a),B=p(b);return '#'+A.map((v,i)=>Math.round(v+(B[i]-v)*k).toString(16).padStart(2,'0')).join('');}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function ridge(yBase,amp,seed,freq,W,H){W=W||800;H=H||440;const r=rng(seed),p=[r()*6,r()*6];let d='M0 '+H+' L';
+  for(let x=0;x<=W;x+=5){const y=yBase-amp*(0.7*Math.sin(x*freq+p[0])+0.3*Math.sin(x*freq*2.1+p[1]));d+=x+' '+y.toFixed(1)+' L';}
+  return d+W+' '+H+'Z';}
+function sceneSvg(name,phase,kind){
+  const T=THEMES[name],P=PHASES[phase];const sky=P?P.sky:T.sky;
+  const rc=T.ridges.map(c=>P?mix(c,P.tint,P.k):c);
+  const band=kind==='band',W=band?1600:800,H=band?100:250;
+  const R=band?[[46,9,.006,11],[60,8,.008,23],[74,7,.011,37],[88,6,.014,51]]:[[128,18,.0085,11],[156,15,.011,23],[184,12,.014,37],[212,10,.018,51]];
+  const sx=band?1380:610,sy=band?(phase==='day'?28:40):(phase==='day'?62:84),sr=band?13:24;
+  let s='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMax slice"><defs><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+sky[0]+'"/><stop offset="1" stop-color="'+sky[1]+'"/></linearGradient><linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".7" stop-color="#fff" stop-opacity="'+(phase==='night'?'.07':'.3')+'"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="'+W+'" height="'+H+'" fill="url(#k)"/>';
+  if(phase==='night'){const r=rng(7);for(let i=0;i<(band?50:36);i++)s+='<circle cx="'+(r()*W).toFixed(0)+'" cy="'+(r()*H*.45).toFixed(0)+'" r="'+(r()*1.1+.4).toFixed(1)+'" fill="#fff" opacity="'+(r()*.5+.4).toFixed(2)+'"/>';
+    s+='<circle cx="'+sx+'" cy="'+sy+'" r="'+sr+'" fill="#F4EFD8"/><circle cx="'+(sx+sr*.45)+'" cy="'+(sy-sr*.3)+'" r="'+(sr*.92)+'" fill="'+mix(sky[0],sky[1],(sy-sr*.3)/H)+'"/>';}
+  else{s+='<circle cx="'+sx+'" cy="'+sy+'" r="'+sr+'" fill="'+T.sun+'" opacity="'+(name==='earth'?1:.92)+'"/>';
+    if(!band)s+='<g fill="none" stroke="'+mix(rc[3],'#000000',.2)+'" stroke-width="1.6" stroke-linecap="round" opacity=".5"><path d="M470 70 q5 -5 10 0 q5 -5 10 0"/><path d="M500 58 q4 -4 8 0 q4 -4 8 0"/><path d="M520 76 q3 -3 6 0 q3 -3 6 0"/></g>';}
+  R.forEach((q,i)=>{s+='<path d="'+ridge(q[0],q[1],q[3],q[2],W,H)+'" fill="'+rc[i]+'"/>';if(i<3)s+='<rect x="0" y="'+(q[0]-q[1]*1.2)+'" width="'+W+'" height="'+(q[1]*2.4)+'" fill="url(#m)"/>';});
+  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s+'</svg>');
+}
+let themeName='earth',themePhase='day';
+function themePref(){try{return localStorage.getItem(TKEY)||'random';}catch(e){return 'random';}}
+function applyTheme(pref){
+  pref=pref||themePref();const names=Object.keys(THEMES);
+  themeName=names.includes(pref)?pref:names[Math.floor(Math.random()*names.length)];themePhase=phaseNow();
+  const T=THEMES[themeName],dark=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches;
+  const acc=dark?mix(T.acc,'#FFFFFF',.35):T.acc,rs=document.documentElement.style;
+  rs.setProperty('--accent',acc);rs.setProperty('--accent-soft',dark?mix(T.acc,'#1d1d1b',.75):mix(T.acc,'#FFFFFF',.88));rs.setProperty('--accent2',T.acc2);
+  const hs=sceneSvg(themeName,themePhase,'hero'),bs=sceneSvg(themeName,themePhase,'band');
+  document.querySelectorAll('img.scene').forEach(i=>i.src=i.closest('.band')?bs:hs);
+  document.body.classList.toggle('sky-dark',themePhase==='dusk'||themePhase==='night');
+  document.querySelectorAll('.themeSel').forEach(sel=>{sel.innerHTML=['random',...names].map(n=>'<option value="'+n+'"'+(n===pref?' selected':'')+'>'+(n==='random'?'Random each visit ('+themeName+')':cap(n))+'</option>').join('');});
+}
+
+
+/* ================= Fisher Backtest Builder ================= */
+const APP_ID='tiger-fisher-backtest',SKEY='fisher.state';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+const IDENT=/^[A-Za-z_][A-Za-z0-9_]*$/;
+const DEF={
+  cols:{date:'txn_date',merchant:'merchant_id',customer:'client_id',amount:'txn_amount'},
+  units:{customer:true,txn:true},
+  metrics:[{name:'high_util',kind:'flag',expr:'utilization > 0.9',op:'>=',value:''},
+           {name:'big_ticket',kind:'amount',expr:'',op:'>=',value:'5000000'},
+           {name:'volume',kind:'volume',expr:'',op:'>=',value:''}],
+  comps:[{rs:1,re:1,bs:2,be:8},{rs:1,re:7,bs:8,be:15},{rs:1,re:7,bs:8,be:35},{rs:1,re:30,bs:31,be:90}],
+  anchor:{start:'',end:'',skipLast:false},
+  peer:{on:true,cols:'seller_group, h3_9',min:'3'},
+  labels:{susp:'f_suspicious = 1',suspDate:'',def:'f_pd30',obs:'f_pd30_obs'},
+  rule:{q:'0.05',or:'2',cooldown:'7',minTotal:'10',minFlag:'5',maxRows:'3000000'}
+};
+const clone=o=>JSON.parse(JSON.stringify(o));
+let state=clone(DEF),storageOk=true,pending=null;
+
+/* ---------- state ---------- */
+function sanitize(o){
+  const s=clone(DEF);if(!o||typeof o!=='object')return s;
+  ['cols','units','anchor','peer','labels','rule'].forEach(g=>{if(o[g]&&typeof o[g]==='object')Object.keys(s[g]).forEach(k=>{
+    if(k in o[g]&&o[g][k]!==null&&typeof o[g][k]===typeof s[g][k])s[g][k]=o[g][k];});});
+  if(Array.isArray(o.metrics))s.metrics=o.metrics.filter(m=>m&&typeof m==='object').map(m=>({name:String(m.name||''),
+    kind:['flag','amount','volume'].includes(m.kind)?m.kind:'flag',expr:String(m.expr||''),op:['>=','>','<=','<'].includes(m.op)?m.op:'>=',value:String(m.value||'')}));
+  if(Array.isArray(o.comps))s.comps=o.comps.filter(c=>c&&typeof c==='object').map(c=>({rs:+c.rs||0,re:+c.re||0,bs:+c.bs||0,be:+c.be||0}));
+  return s;
+}
+function load(){try{const v=localStorage.getItem(SKEY);if(v)state=sanitize(JSON.parse(v));}catch(e){storageOk=false;}}
+function save(){try{localStorage.setItem(SKEY,JSON.stringify(state));}catch(e){storageOk=false;banner();}}
+function banner(msg,err){const b=$('#banner');if(!msg&&storageOk){b.classList.add('hidden');return;}
+  b.textContent=msg||'This browser is not letting the page save settings. Use Export settings to keep a copy.';
+  b.classList.toggle('err',!!err||!msg);b.classList.remove('hidden');if(msg){clearTimeout(banner.t);banner.t=setTimeout(()=>banner(),2600);}}
+const getK=k=>k.split('.').reduce((o,p)=>o[p],state);
+function setK(k,v){const p=k.split('.'),last=p.pop();p.reduce((o,q)=>o[q],state)[last]=v;}
+
+/* ---------- names and checks ---------- */
+const cmpName=c=>(c.rs===1?String(c.re):c.rs+'-'+c.re)+' vs '+c.bs+'-'+c.be;
+const list=s=>String(s).split(',').map(x=>x.trim()).filter(Boolean);
+const isNum=v=>String(v).trim()!==''&&isFinite(+v);
+const isInt=v=>isNum(v)&&Number.isInteger(+v);
+const isDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(v)&&!isNaN(new Date(v+'T00:00:00Z'));
+function validate(){
+  const E={},add=(k,m)=>{(E[k]=E[k]||[]).push(m);};
+  ['date','merchant','customer'].forEach(k=>{const v=state.cols[k].trim();if(!v)add('cols.'+k,'Required.');else if(!IDENT.test(v))add('cols.'+k,'Use a plain column name (letters, digits, _).');});
+  if(state.cols.amount.trim()&&!IDENT.test(state.cols.amount.trim()))add('cols.amount','Use a plain column name.');
+  if(!state.units.customer&&!state.units.txn)add('units','Tick at least one way to count.');
+  if(!state.metrics.length)add('metrics','Add at least one metric.');
+  const seen={};
+  state.metrics.forEach((m,i)=>{const n=m.name.trim();
+    if(!n)add('m'+i,'Give the metric a name.');else if(!IDENT.test(n))add('m'+i,'Name: letters, digits and _ only, not starting with a digit.');
+    else if(seen[n])add('m'+i,'Two metrics are called '+n+'.');seen[n]=1;
+    if(m.kind==='flag'&&!m.expr.trim())add('m'+i,'Write the SQL condition.');
+    if(m.kind==='flag'&&/;|--/.test(m.expr))add('m'+i,'The condition must be one expression, without ; or --.');
+    if(m.kind==='amount'){if(!state.cols.amount.trim())add('m'+i,'Fill in the Amount column first (section 1).');if(!isNum(m.value))add('m'+i,'Enter a number.');}});
+  if(!state.comps.length)add('comps','Add at least one comparison.');
+  const cs={};
+  state.comps.forEach((c,i)=>{const v=[c.rs,c.re,c.bs,c.be];
+    if(!v.every(x=>Number.isInteger(x)&&x>=1&&x<=400))add('c'+i,'Use whole days from 1 to 400.');
+    else if(c.rs>c.re||c.bs>c.be)add('c'+i,'Each window needs start ≤ end.');
+    else if(c.bs<=c.re&&c.rs<=c.be)add('c'+i,'The base window overlaps the recent one.');
+    const n=cmpName(c);if(cs[n])add('c'+i,'Same comparison twice.');cs[n]=1;});
+  ['start','end'].forEach(k=>{const v=state.anchor[k].trim();if(v&&!isDate(v))add('anchor.'+k,'Use YYYY-MM-DD.');});
+  if(isDate(state.anchor.start)&&isDate(state.anchor.end)&&state.anchor.start>state.anchor.end)add('anchor.end','Must be after From.');
+  if(state.peer.on){const pc=list(state.peer.cols);if(!pc.length)add('peer.cols','List at least one column, or untick the peer check.');
+    else if(!pc.every(c=>IDENT.test(c)))add('peer.cols','Comma-separated plain column names.');
+    if(!isInt(state.peer.min)||+state.peer.min<1)add('peer.min','A whole number, 1 or more.');}
+  const L=state.labels;
+  if(L.suspDate.trim()&&!IDENT.test(L.suspDate.trim()))add('labels.suspDate','Use a plain column name.');
+  if(L.suspDate.trim()&&!L.susp.trim())add('labels.suspDate','Only used with a suspicious condition.');
+  if(/;|--/.test(L.susp))add('labels.susp','One expression, without ; or --.');
+  ['def','obs'].forEach(k=>{if(L[k].trim()&&!IDENT.test(L[k].trim()))add('labels.'+k,'Use a plain column name.');});
+  if(!!L.def.trim()!==!!L.obs.trim())add(L.def.trim()?'labels.obs':'labels.def','Default lift needs both the default and the observed column.');
+  const R=state.rule;
+  if(!isNum(R.q)||+R.q<=0||+R.q>1)add('rule.q','Between 0 and 1.');
+  if(!isNum(R.or)||+R.or<1)add('rule.or','1 or more.');
+  [['cooldown',0],['minTotal',1],['minFlag',1],['maxRows',1000]].forEach(([k,mn])=>{if(!isInt(R[k])||+R[k]<mn)add('rule.'+k,'A whole number, '+mn+' or more.');});
+  return E;
+}
+
+/* ---------- Python output ---------- */
+const py=v=>v===null||v===undefined?'None':v===true?'True':v===false?'False':typeof v==='number'?String(v):JSON.stringify(String(v));
+function metricExpr(m){return m.kind==='amount'?state.cols.amount.trim()+' '+m.op+' '+(+m.value):m.expr.trim();}
+function config(){
+  const R=state.rule,L=state.labels;
+  return {
+    date_col:state.cols.date.trim(),merchant_col:state.cols.merchant.trim(),customer_col:state.cols.customer.trim(),
+    metrics:state.metrics.map(m=>m.kind==='volume'?{name:m.name.trim(),kind:'volume'}:{name:m.name.trim(),kind:'flag',expr:metricExpr(m)}),
+    comparisons:state.comps.map(c=>({name:cmpName(c),recent:[c.rs,c.re],base:[c.bs,c.be]})),
+    units:['customer','txn'].filter(u=>state.units[u]),
+    peer_cols:state.peer.on?list(state.peer.cols):[],min_peers:+state.peer.min||1,
+    anchor_start:state.anchor.start.trim()||null,anchor_end:state.anchor.end.trim()||null,skip_last_day:state.anchor.skipLast,
+    min_total:+R.minTotal,min_flag:+R.minFlag,q_max:+R.q,or_min:+R.or,cooldown:+R.cooldown,max_rows:+R.maxRows,
+    susp_cond:L.susp.trim()||null,susp_date_col:L.suspDate.trim()||null,def_col:L.def.trim()||null,obs_col:L.obs.trim()||null
+  };
+}
+function pyLit(v,ind){
+  if(Array.isArray(v)){if(!v.length)return '[]';
+    if(v.every(x=>typeof x!=='object'||x===null))return '['+v.map(py).join(', ')+']';
+    return '[\n'+v.map(x=>ind+'    '+pyLit(x,ind+'    ')+',').join('\n')+'\n'+ind+']';}
+  if(v&&typeof v==='object'){const ks=Object.keys(v);
+    if(ks.every(k=>typeof v[k]!=='object'||v[k]===null||(Array.isArray(v[k])&&v[k].every(x=>typeof x!=='object'))))
+      {const one='{'+ks.map(k=>py(k)+': '+pyLit(v[k],ind)).join(', ')+'}';if(one.length<=96)return one;}
+    return '{\n'+ks.map(k=>ind+'    '+py(k)+': '+pyLit(v[k],ind+'    ')+',').join('\n')+'\n'+ind+'}';}
+  return py(v);
+}
+function generate(){
+  const c=config(),d=new Date().toISOString().slice(0,10);
+  const rules=c.metrics.length*c.comparisons.length*c.units.length*(c.peer_cols.length?2:1);
+  return ['"""Fisher backtest, generated '+d+' by Tiger Tools html/fisher (Fisher Backtest Builder).',
+    '',
+    'Paste into a notebook cell where `spark` and `df` (transaction level) already exist,',
+    'or run: exec(open("/path/to/this_file.py").read())',
+    '',
+    'Every day in the anchor range plays "today". For each seller, metric, comparison, count unit',
+    'and test (self: recent vs base window; peer: seller vs other sellers in its peer group), it',
+    'builds a 2x2 table and runs a one-sided Fisher exact test. A rule fires when the BH q-value',
+    '(over all sellers that day) <= q_max and the odds ratio >= or_min.',
+    '',
+    rules+' rules: '+c.metrics.length+' metrics x '+c.comparisons.length+' comparisons x '+c.units.length+' units x '+(c.peer_cols.length?'2 tests':'1 test')+'.',
+    '',
+    'Returns detail (one row per tested seller x day x rule) and summary (one row per rule).',
+    '"""',
+    'CONFIG = '+pyLit(c,''),
+    '',
+    ENGINE.trim(),
+    '',
+    '',
+    '# ---------------------------------------------------------------------------- run',
+    'r = run_fisher_backtest(df, CONFIG, spark=spark)',
+    "detail, summary = r['detail'], r['summary']",
+    'summary',''].join('\n');
+}
+function fileName(){return 'fisher_backtest_'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'.py';}
+
+/* ---------- render ---------- */
+function renderLists(){
+  $('#metrics').innerHTML=state.metrics.map((m,i)=>'<div class="item" data-i="'+i+'"><div class="ihead">'+
+    '<input class="in" data-m="name" value="'+esc(m.name)+'" placeholder="metric_name" aria-label="Metric name">'+
+    '<select data-m="kind" aria-label="Kind">'+[['flag','Flag share'],['amount','Amount flag'],['volume','Volume']].map(([v,t])=>'<option value="'+v+'"'+(m.kind===v?' selected':'')+'>'+t+'</option>').join('')+'</select>'+
+    '<button class="x" data-del-m="'+i+'" aria-label="Remove metric">Remove</button></div>'+
+    (m.kind==='flag'?'<div class="irow"><input class="in" data-m="expr" value="'+esc(m.expr)+'" placeholder="utilization > 0.9" aria-label="SQL condition"></div>':'')+
+    (m.kind==='amount'?'<div class="irow"><code>'+esc(state.cols.amount||'amount')+'</code><select data-m="op" aria-label="Operator">'+['>=','>','<=','<'].map(o=>'<option'+(m.op===o?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select><input class="in" data-m="value" value="'+esc(m.value)+'" inputmode="decimal" style="flex:1 1 120px" aria-label="Amount"></div>':'')+
+    (m.kind==='volume'?'<div class="irow muted">Seller\'s share of all transactions (self) or of its peer group (peer).</div>':'')+
+    '<div class="err" id="e-m'+i+'"></div></div>').join('');
+  const win=(lab,k1,k2,c)=>'<span class="win"><span class="wl">'+lab+'</span><input class="in num" data-c="'+k1+'" value="'+c[k1]+'" inputmode="numeric" aria-label="'+lab+' from">–<input class="in num" data-c="'+k2+'" value="'+c[k2]+'" inputmode="numeric" aria-label="'+lab+' to"></span>';
+  $('#comps').innerHTML=state.comps.map((c,i)=>'<div class="cmp" data-i="'+i+'"><div class="chead"><span class="name">'+esc(cmpName(c))+'</span><button class="x" data-del-c="'+i+'" aria-label="Remove comparison">Remove</button></div>'+
+    '<div class="wins">'+win('Recent','rs','re',c)+win('Base','bs','be',c)+'</div><div class="err" id="e-c'+i+'"></div></div>').join('');
+}
+function renderFields(){document.querySelectorAll('[data-k]').forEach(el=>{const v=getK(el.dataset.k);if(el.type==='checkbox')el.checked=!!v;else if(document.activeElement!==el)el.value=v;});}
+let lastErr={};
+function refresh(){
+  const E=validate();lastErr=E;
+  document.querySelectorAll('[data-k]').forEach(el=>{el.classList.toggle('bad',!!E[el.dataset.k]);
+    let n=el.parentElement.querySelector('.err.f');if(E[el.dataset.k]){if(!n){n=document.createElement('div');n.className='err f';el.parentElement.appendChild(n);}n.textContent=E[el.dataset.k].join(' ');}else if(n)n.remove();});
+  state.metrics.forEach((m,i)=>{const e=$('#e-m'+i);if(e)e.textContent=(E['m'+i]||[]).join(' ');});
+  state.comps.forEach((c,i)=>{const e=$('#e-c'+i);if(e)e.textContent=(E['c'+i]||[]).join(' ');const n=document.querySelector('.cmp[data-i="'+i+'"] .name');if(n)n.textContent=cmpName(c);});
+  const all=Object.entries(E);
+  $('#errs').innerHTML=all.length?'<div class="errs"><b>Fix '+all.length+' '+(all.length===1?'thing':'things')+' before using the file:</b><ul>'+all.map(([k,v])=>'<li>'+esc(where(k))+': '+esc(v.join(' '))+'</li>').join('')+'</ul></div>':'';
+  $('#code').textContent=all.length?'# Fix the problems above to generate the file.':generate();
+}
+function where(k){if(/^m\d+$/.test(k)){const m=state.metrics[+k.slice(1)];return 'Metric '+(m&&m.name?m.name:'#'+(+k.slice(1)+1));}
+  if(/^c\d+$/.test(k))return 'Comparison '+(+k.slice(1)+1);
+  const N={'cols.date':'Date column','cols.merchant':'Seller column','cols.customer':'Customer column','cols.amount':'Amount column',units:'Count by',metrics:'Metrics',comps:'Comparisons',
+    'anchor.start':'Anchor from','anchor.end':'Anchor to','peer.cols':'Peer columns','peer.min':'Min other sellers','labels.susp':'Suspicious condition','labels.suspDate':'Flagged-on date',
+    'labels.def':'Default column','labels.obs':'Observed column','rule.q':'q-value','rule.or':'Odds ratio','rule.cooldown':'Cooldown','rule.minTotal':'Min recent total','rule.minFlag':'Min flagged','rule.maxRows':'Max rows'};
+  return N[k]||k;}
+function all(){renderFields();renderLists();refresh();}
+
+/* ---------- export / import ---------- */
+function stamp(){const d=new Date(),z=n=>String(n).padStart(2,'0');return d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'-'+z(d.getHours())+z(d.getMinutes());}
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},800);}
+function exportSettings(){download('fisher-backtest-settings-'+stamp()+'.json',JSON.stringify({app:APP_ID,v:1,exported:new Date().toISOString(),data:state},null,2),'application/json');}
+function sheet(h){$('#sheetc').innerHTML=h;$('#sheet').classList.remove('hidden');}
+function closeSheet(){$('#sheet').classList.add('hidden');pending=null;}
+async function readSettings(file){
+  let o;try{o=JSON.parse(await file.text());}catch(e){return sheet('<h3>Import settings</h3><p>This file is not valid JSON.</p><div class="row-end"><button data-s="close">Close</button></div>');}
+  if(!o||o.app!==APP_ID||!o.data)return sheet('<h3>Import settings</h3><p>'+(o&&o.app?'This file is from a different app ('+esc(String(o.app).slice(0,40))+').':'This is not a Fisher Backtest Builder settings file.')+'</p><div class="row-end"><button data-s="close">Close</button></div>');
+  pending=sanitize(o.data);
+  sheet('<h3>Import settings</h3><p>The file has <b>'+pending.metrics.length+'</b> metrics and <b>'+pending.comps.length+'</b> comparisons.</p><ul class="muted" style="font-size:13px;padding-left:18px"><li><b>Merge</b> keeps your columns and rules, and adds the file’s metrics and comparisons you don’t have.</li><li><b>Replace</b> takes everything from the file.</li></ul><div class="row-end"><button data-s="close">Cancel</button><button data-s="merge">Merge</button><button class="primary" data-s="replace">Replace</button></div>');
+}
+function merge(p){const names=new Set(state.metrics.map(m=>m.name)),cs=new Set(state.comps.map(cmpName));
+  p.metrics.forEach(m=>{if(!names.has(m.name))state.metrics.push(m);});p.comps.forEach(c=>{if(!cs.has(cmpName(c)))state.comps.push(c);});}
+
+/* ---------- wiring ---------- */
+document.addEventListener('DOMContentLoaded',()=>{
+  load();
+  document.addEventListener('input',e=>{const t=e.target;
+    if(t.dataset.k&&t.type!=='checkbox'){setK(t.dataset.k,t.value);if(t.dataset.k==='cols.amount')document.querySelectorAll('.irow code').forEach(c=>c.textContent=t.value||'amount');}
+    else if(t.dataset.m){const i=+t.closest('.item').dataset.i;state.metrics[i][t.dataset.m]=t.value;}
+    else if(t.dataset.c){const i=+t.closest('.cmp').dataset.i,v=t.value.trim();state.comps[i][t.dataset.c]=/^\d+$/.test(v)?+v:NaN;}
+    else return;save();refresh();});
+  document.addEventListener('change',e=>{const t=e.target;
+    if(t.dataset.k&&t.type==='checkbox'){setK(t.dataset.k,t.checked);save();refresh();}
+    if(t.dataset.m==='kind'||t.dataset.m==='op'){const i=+t.closest('.item').dataset.i;state.metrics[i][t.dataset.m]=t.value;save();renderLists();refresh();}
+    if(t.classList.contains('themeSel')){try{localStorage.setItem(TKEY,t.value);}catch(err){}applyTheme(t.value);}});
+  document.addEventListener('click',e=>{const t=e.target.closest('[data-del-m],[data-del-c]');if(!t)return;
+    if(t.dataset.delM!==undefined)state.metrics.splice(+t.dataset.delM,1);else state.comps.splice(+t.dataset.delC,1);save();renderLists();refresh();});
+  $('#addMetric').onclick=()=>{let n=state.metrics.length+1;while(state.metrics.some(m=>m.name==='metric_'+n))n++;
+    state.metrics.push({name:'metric_'+n,kind:'flag',expr:'',op:'>=',value:''});save();renderLists();refresh();document.querySelector('.item:last-child [data-m="expr"]').focus();};
+  $('#addComp').onclick=()=>{state.comps.push({rs:1,re:14,bs:15,be:60});save();renderLists();refresh();};
+  $('#reset').onclick=()=>sheet('<h3>Reset</h3><p>Go back to the example settings? Your current settings are lost unless you export them first.</p><div class="row-end"><button data-s="close">Cancel</button><button class="primary" data-s="reset">Reset</button></div>');
+  $('#copy').onclick=async()=>{if(Object.keys(lastErr).length)return banner('Fix the problems listed above first.',true);
+    try{await navigator.clipboard.writeText(generate());banner('Copied.');}catch(e){const r=document.createRange();r.selectNodeContents($('#code'));const s=getSelection();s.removeAllRanges();s.addRange(r);banner('Selected: press Ctrl+C (or Copy) to copy.');}};
+  $('#dl').onclick=()=>{if(Object.keys(lastErr).length)return banner('Fix the problems listed above first.',true);download(fileName(),generate(),'text/x-python');};
+  document.querySelectorAll('.expSet').forEach(b=>b.onclick=exportSettings);
+  document.querySelectorAll('.impSet').forEach(b=>b.onclick=()=>$('#setIn').click());
+  $('#setIn').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)readSettings(f);};
+  $('#sheet').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(e.target.id==='sheet'||(b&&b.dataset.s==='close'))return closeSheet();if(!b)return;
+    if(b.dataset.s==='reset'){state=clone(DEF);save();closeSheet();all();banner('Settings reset.');}
+    if(pending&&b.dataset.s==='replace'){state=pending;save();closeSheet();all();banner('Settings replaced.');}
+    if(pending&&b.dataset.s==='merge'){merge(pending);save();closeSheet();all();banner('Settings merged.');}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+  try{localStorage.setItem('fisher.__t','1');localStorage.removeItem('fisher.__t');}catch(e){storageOk=false;banner();}
+  applyTheme();all();
+  if(window.matchMedia)try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>applyTheme());}catch(e){}
+  setInterval(()=>{if(document.visibilityState==='visible'&&phaseNow()!==themePhase)applyTheme();},60000);
+});
+
+</script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fisher Backtest Builder</title>
+<style>/*CSS*/</style>
+</head>
+<body>
+<div id="banner" class="banner hidden"></div>
+<div class="hero"><img class="scene" alt=""><div class="hero-t"><h1>Fisher Backtest Builder</h1><p>Declare the columns and rules. Get one .py that backtests them on your data.</p></div></div>
+<main>
+  <div class="lrow"><span><button class="impSet">Import settings</button> <button class="expSet">Export settings</button> <button id="reset">Reset</button></span><label class="muted">Theme <select class="themeSel"></select></label></div>
+
+  <section class="card">
+    <h2>1. Columns in <code>df</code></h2>
+    <p class="hint"><code>df</code> is your transaction-level Spark DataFrame, one row per transaction. Don't aggregate it first.</p>
+    <div class="grid">
+      <label>Date<input class="in" data-k="cols.date"></label>
+      <label>Seller<input class="in" data-k="cols.merchant"></label>
+      <label>Customer<input class="in" data-k="cols.customer"></label>
+      <label>Amount <span class="muted">(for amount flags)</span><input class="in" data-k="cols.amount"></label>
+    </div>
+    <div class="sub">Count by</div>
+    <div class="chips">
+      <label class="chip"><input type="checkbox" data-k="units.customer"> Distinct customers</label>
+      <label class="chip"><input type="checkbox" data-k="units.txn"> Transactions</label>
+    </div>
+    <p class="hint">Customers: a person counts once, however many times they pay (the safer test). Transactions: every payment counts, which also catches a few customers paying many times. Tick both to compare them in the backtest.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Metrics</h2>
+    <p class="hint"><b>Flag share</b>: any SQL condition on a transaction. <b>Amount flag</b>: amount above or below a value. <b>Volume</b>: the seller's share of all transactions (self test) or of its peer group (peer test).</p>
+    <div id="metrics"></div>
+    <button id="addMetric" class="wide">+ Add metric</button>
+  </section>
+
+  <section class="card">
+    <h2>3. Comparisons</h2>
+    <p class="hint">Days counted back from each anchor day; day 1 is the anchor itself. Every day in the data is an anchor (rolling backtest).</p>
+    <div id="comps"></div>
+    <button id="addComp" class="wide">+ Add comparison</button>
+    <div class="sub">Anchor range <span class="muted">(optional)</span></div>
+    <div class="grid">
+      <label>From<input class="in" data-k="anchor.start" placeholder="first possible day"></label>
+      <label>To<input class="in" data-k="anchor.end" placeholder="last day in df"></label>
+    </div>
+    <label class="chip" style="margin-top:8px"><input type="checkbox" data-k="anchor.skipLast"> Skip the last day in <code>df</code> (partly loaded)</label>
+  </section>
+
+  <section class="card">
+    <h2>4. Peer check</h2>
+    <label class="chip"><input type="checkbox" data-k="peer.on"> Compare each seller with its peers</label>
+    <div class="grid" style="margin-top:8px">
+      <label>Peer group columns<input class="in" data-k="peer.cols" placeholder="seller_group, h3_9"></label>
+      <label>Min other sellers<input class="in" data-k="peer.min" inputmode="numeric"></label>
+    </div>
+    <p class="hint">Peers = the other sellers with the same values in these columns, in the same recent window. The seller itself is always left out. Counting by customers, its own customers are left out of the peer row too, so the two rows never share a person.</p>
+  </section>
+
+  <section class="card">
+    <h2>5. Labels <span class="muted">(optional)</span></h2>
+    <p class="hint">Transaction level. Leave blank to skip precision, recall and default lift.</p>
+    <div class="grid">
+      <label>Suspicious (SQL condition)<input class="in" data-k="labels.susp" placeholder="f_suspicious = 1"></label>
+      <label>Flagged-on date column<input class="in" data-k="labels.suspDate" placeholder="blank = transaction date"></label>
+      <label>Default column (0/1)<input class="in" data-k="labels.def" placeholder="f_pd30"></label>
+      <label>Observed column (0/1)<input class="in" data-k="labels.obs" placeholder="f_pd30_obs"></label>
+    </div>
+    <p class="hint">A seller is suspicious from the date of its first suspicious transaction (or the flagged-on date). Default lift compares matured loans inside alert windows with all other matured loans.</p>
+  </section>
+
+  <section class="card">
+    <h2>6. Trigger rule</h2>
+    <div class="grid g3">
+      <label>q-value ≤<input class="in" data-k="rule.q" inputmode="decimal"></label>
+      <label>Odds ratio ≥<input class="in" data-k="rule.or" inputmode="decimal"></label>
+      <label>Cooldown days<input class="in" data-k="rule.cooldown" inputmode="numeric"></label>
+      <label>Min recent total<input class="in" data-k="rule.minTotal" inputmode="numeric"></label>
+      <label>Min flagged<input class="in" data-k="rule.minFlag" inputmode="numeric"></label>
+      <label>Max rows to pandas<input class="in" data-k="rule.maxRows" inputmode="numeric"></label>
+    </div>
+    <p class="hint">A test runs when the seller has at least <i>min recent total</i> in the recent window and at least <i>min flagged</i> flagged (for volume: its own count). It fires when q (Benjamini–Hochberg over all sellers that day) and the odds ratio both pass. One-sided: only increases fire.</p>
+  </section>
+
+  <section class="card out" id="out">
+    <div class="ohead"><h2>Generated .py</h2><span class="btns"><button id="copy">Copy</button><button class="primary" id="dl">Download .py</button></span></div>
+    <div id="errs"></div>
+    <p class="hint">Paste it into a notebook cell where <code>spark</code> and <code>df</code> exist, or run <code>exec(open(path).read())</code>. It ends with <code>detail, summary</code>.</p>
+    <pre id="code"></pre>
+  </section>
+  <p class="muted foot">Works offline. Your settings are saved in this browser; use Export settings to keep a copy.</p>
+</main>
+<input type="file" id="setIn" accept=".json,application/json" hidden>
+<div id="sheet" class="sheet hidden"><div class="card" id="sheetc"></div></div>
+<script>
+'use strict';
+/*JS*/
+</script>
+</body>
+</html>
