@@ -326,12 +326,42 @@ def _summary(det, fam, n_days, comparisons, metrics, susp, loans, a_start, a_end
     return out.sort_values(sort, ascending=False, na_position='last').reset_index(drop=True)
 
 
+def _intervals(det, comparisons):
+    """Seller day ranges covered by the recent window of each fired day / alert, per rule, with
+    overlapping or touching ranges merged (each transaction then falls in at most one range)."""
+    keys = ['metric', 'comparison', 'unit', 'test']
+    rec = {c['name']: tuple(c['recent']) for c in comparisons}
+    rules = det[keys].drop_duplicates().reset_index(drop=True)
+    rules['rid'] = np.arange(len(rules))
+    parts = []
+    for basis, col in [('fired', 'fired'), ('alert', 'alert')]:
+        ev = det[det[col]].merge(rules, on=keys)
+        if not len(ev):
+            continue
+        s_ = ev['comparison'].map(lambda c: rec[c][0]).values
+        e_ = ev['comparison'].map(lambda c: rec[c][1]).values
+        parts.append(pd.DataFrame({'rid': ev['rid'].values, 'basis': basis, 'merchant': ev['merchant'].values,
+                                   'start': ev['anchor'].values - pd.to_timedelta(e_ - 1, unit='D'),
+                                   'end': ev['anchor'].values - pd.to_timedelta(s_ - 1, unit='D')}))
+    if not parts:
+        return rules, pd.DataFrame(columns=['rid', 'basis', 'merchant', 'start', 'end'])
+    iv = pd.concat(parts, ignore_index=True).sort_values(['rid', 'basis', 'merchant', 'start'])
+    g = ['rid', 'basis', 'merchant']
+    prev_end = iv.groupby(g)['end'].transform(lambda x: x.cummax().shift())
+    new = prev_end.isna() | (iv['start'] > prev_end + pd.Timedelta(days=1))
+    iv['_k'] = new.cumsum()
+    iv = iv.groupby(g + ['_k'], as_index=False).agg(start=('start', 'min'), end=('end', 'max')).drop(columns='_k')
+    return rules, iv
+
+
 # ---------------------------------------------------------------------------- main
 def run_fisher_backtest(df, config, spark=None):
     """Rolling backtest of Fisher-test triggers. Every day in the anchor range plays 'today'.
 
     Returns a dict: ok, detail (pandas: one row per tested seller x day x rule), summary
-    (pandas: one row per rule), failed_step and error when it stopped."""
+    (pandas: one row per rule), outcomes (pandas: per rule, transactions in the recent window of
+    fired days / alerts vs the rest: suspicious, default and observed, by transaction and by
+    client), failed_step and error when it stopped."""
     from pyspark.sql import functions as F
     cfg = dict(DEFAULTS); cfg.update(config or {})
     spark = spark or df.sparkSession
@@ -341,8 +371,8 @@ def run_fisher_backtest(df, config, spark=None):
     levels = ([('p', '_g')] + ([('p2', '_g2')] if fb else [])) if peer else []
     units = list(cfg['units'])
     steps = ['check_inputs', 'anchor_range'] + ['spark_tests_' + u for u in units] + \
-            ['fisher_and_q', 'alerts', 'spark_labels', 'summary']
-    res = {'ok': False, 'detail': None, 'summary': None, 'failed': []}
+            ['fisher_and_q', 'alerts', 'spark_labels', 'spark_outcomes', 'summary']
+    res = {'ok': False, 'detail': None, 'summary': None, 'outcomes': None, 'failed': []}
     st = {}
     t0 = time.time()
 
@@ -466,6 +496,84 @@ def run_fisher_backtest(df, config, spark=None):
             st['loans'] = l
             _log(f"      {int(l['obs_n'].sum()):,} observed loans (from the first window day)")
 
+    def outcomes():
+        """Transactions in the recent window of fired days / alerts, per rule, against the rest of the
+        anchor range: counts by transaction and by distinct client (exact, each client once per rule)."""
+        a_s, a_e = st['a_s'], st['a_e']
+        rules, iv = _intervals(st['detail'], comparisons)
+        iv['start'] = iv['start'].clip(lower=a_s); iv['end'] = iv['end'].clip(upper=a_e)
+        iv = iv[iv['start'] <= iv['end']]
+        has_s, has_d = bool(cfg['susp_cond']), bool(cfg['def_col'] and cfg['obs_col'])
+        d = F.to_date(F.col(cfg['date_col']))
+        one = lambda c: F.when(c, 1).otherwise(0)
+        T = df.where(d.between(str(a_s.date()), str(a_e.date()))).select(
+            F.col(cfg['merchant_col']).cast('string').alias('_m'), d.alias('_d'),
+            F.col(cfg['customer_col']).cast('string').alias('_c'),
+            (one(F.expr(cfg['susp_cond'])) if has_s else F.lit(0)).alias('_s'),
+            (one(F.col(cfg['obs_col']).cast('int') == 1) if has_d else F.lit(0)).alias('_o'),
+            (one((F.col(cfg['obs_col']).cast('int') == 1) & (F.col(cfg['def_col']).cast('int') == 1))
+             if has_d else F.lit(0)).alias('_x')).persist()
+        tx = lambda: [F.count(F.lit(1)).alias('txn'), F.sum('_s').alias('susp_txn'),
+                      F.sum('_o').alias('obs_txn'), F.sum('_x').alias('def_txn')]
+        tot = T.agg(*tx()).toPandas().iloc[0]
+        per_c = T.groupBy('_c').agg(F.count(F.lit(1)).alias('n'), F.sum('_s').alias('ns'),
+                                    F.sum('_o').alias('no'), F.sum('_x').alias('nx'))
+        cl = per_c.agg(F.count(F.lit(1)).alias('client'), F.sum(one(F.col('ns') > 0)).alias('susp_client'),
+                       F.sum(one(F.col('no') > 0)).alias('obs_client'),
+                       F.sum(one(F.col('nx') > 0)).alias('def_client')).toPandas().iloc[0]
+        allr = {**{k: int(tot[k] or 0) for k in ['txn', 'susp_txn', 'obs_txn', 'def_txn']},
+                **{k: int(cl[k] or 0) for k in ['client', 'susp_client', 'obs_client', 'def_client']}}
+        cov_t = cov_c = full = pd.DataFrame(columns=['rid', 'basis'])
+        if len(iv):
+            I = spark.createDataFrame(pd.DataFrame({'rid': iv['rid'].astype(int), 'basis': iv['basis'].astype(str),
+                                                    '_im': iv['merchant'].astype(str),
+                                                    '_is': iv['start'].dt.strftime('%Y-%m-%d'),
+                                                    '_ie': iv['end'].dt.strftime('%Y-%m-%d')}))
+            I = I.select('rid', 'basis', '_im', F.to_date('_is').alias('_is'), F.to_date('_ie').alias('_ie'))
+            C = T.join(F.broadcast(I), (T['_m'] == I['_im']) & T['_d'].between(I['_is'], I['_ie'])).persist()
+            cov_t = C.groupBy('rid', 'basis').agg(*tx()).toPandas()
+            cc = C.groupBy('rid', 'basis', '_c').agg(F.count(F.lit(1)).alias('k'), F.sum('_s').alias('ks'),
+                                                     F.sum('_o').alias('ko'), F.sum('_x').alias('kx'))
+            cov_c = cc.groupBy('rid', 'basis').agg(
+                F.count(F.lit(1)).alias('client'), F.sum(one(F.col('ks') > 0)).alias('susp_client'),
+                F.sum(one(F.col('ko') > 0)).alias('obs_client'), F.sum(one(F.col('kx') > 0)).alias('def_client')).toPandas()
+            # a client is outside the events if they have at least one transaction (of that kind) outside them
+            full = cc.join(per_c, '_c').groupBy('rid', 'basis').agg(
+                F.sum(one(F.col('k') == F.col('n'))).alias('client'),
+                F.sum(one((F.col('ns') > 0) & (F.col('ks') == F.col('ns')))).alias('susp_client'),
+                F.sum(one((F.col('no') > 0) & (F.col('ko') == F.col('no')))).alias('obs_client'),
+                F.sum(one((F.col('nx') > 0) & (F.col('kx') == F.col('nx')))).alias('def_client')).toPandas()
+            C.unpersist()
+        T.unpersist()
+        cnt = ['txn', 'client', 'susp_txn', 'susp_client', 'obs_txn', 'obs_client', 'def_txn', 'def_client']
+        look = lambda tab, rid, basis: (tab[(tab['rid'] == rid) & (tab['basis'] == basis)].iloc[0]
+                                        if len(tab) and ((tab['rid'] == rid) & (tab['basis'] == basis)).any() else None)
+        kind = {m['name']: m['kind'] for m in metrics}
+        rows = []
+        for _, ru in rules.iterrows():
+            for basis, other in [('fired', 'not_fired'), ('alert', 'not_alerted')]:
+                t_, c_, f_ = look(cov_t, ru['rid'], basis), look(cov_c, ru['rid'], basis), look(full, ru['rid'], basis)
+                inn = {k: int(t_[k]) if t_ is not None else 0 for k in ['txn', 'susp_txn', 'obs_txn', 'def_txn']}
+                inn.update({k: int(c_[k]) if c_ is not None else 0 for k in ['client', 'susp_client', 'obs_client', 'def_client']})
+                out = {k: allr[k] - inn[k] for k in ['txn', 'susp_txn', 'obs_txn', 'def_txn']}
+                out.update({k: allr[k] - (int(f_[k]) if f_ is not None else 0)
+                            for k in ['client', 'susp_client', 'obs_client', 'def_client']})
+                for grp, v in [(basis, inn), (other, out)]:
+                    r = {c: ru[c] for c in ['metric', 'comparison', 'unit', 'test']}
+                    r.update(rule_type=kind.get(ru['metric'], 'flag'), group=grp, **{k: v[k] for k in cnt})
+                    rows.append(r)
+        o = pd.DataFrame(rows)
+        if len(o):
+            dv = lambda a, b: (o[a] / o[b].where(o[b] > 0)).round(4)
+            o['susp_rate_txn'], o['susp_rate_client'] = dv('susp_txn', 'txn'), dv('susp_client', 'client')
+            o['def_rate_txn'], o['def_rate_client'] = dv('def_txn', 'obs_txn'), dv('def_client', 'obs_client')
+            if not has_s:
+                o = o.drop(columns=['susp_txn', 'susp_client', 'susp_rate_txn', 'susp_rate_client'])
+            if not has_d:
+                o = o.drop(columns=['obs_txn', 'obs_client', 'def_txn', 'def_client', 'def_rate_txn', 'def_rate_client'])
+        st['outcomes'] = o
+        _log(f"      {len(iv):,} seller day ranges; outcomes for {len(rules)} rules")
+
     def summary():
         st['summary'] = _summary(st['detail'], st['fam'], st['n_days'], comparisons, metrics, st['susp'], st['loans'],
                                  st['a_s'], st['a_e'], int(cfg['lift_days']))
@@ -474,7 +582,7 @@ def run_fisher_backtest(df, config, spark=None):
                 'fired', 'alert']
         st['detail'] = st['detail'][cols].sort_values(['anchor', 'p']).reset_index(drop=True)
 
-    fns = [check, anchors] + [tests_for(u) for u in units] + [fisher, alerts, labels, summary]
+    fns = [check, anchors] + [tests_for(u) for u in units] + [fisher, alerts, labels, outcomes, summary]
     for i, (name, fn) in enumerate(zip(steps, fns), 1):
         try:
             step(i, name, fn)
@@ -486,6 +594,6 @@ def run_fisher_backtest(df, config, spark=None):
                 _log(f"  not run: {', '.join(rest)}")
             res.update(failed_step=name, error=str(e), failed=[name])
             return res
-    res.update(ok=True, detail=st['detail'], summary=st['summary'])
+    res.update(ok=True, detail=st['detail'], summary=st['summary'], outcomes=st['outcomes'])
     _log(f"\nDone in {time.time() - t0:.0f}s: {len(st['detail']):,} detail rows, {len(st['summary'])} rules.")
     return res

@@ -10,7 +10,7 @@ Paste the downloaded `.py` into a notebook cell where `spark` and `df` already e
 
 ```python
 r = run_fisher_backtest(df, CONFIG, spark=spark)
-detail, summary = r['detail'], r['summary']
+detail, summary, outcomes = r['detail'], r['summary'], r['outcomes']
 ```
 
 It prints every step. At the first failure it prints one line, `FAILED at step i/n: <step>: <error>`, then `not run: ...`, and `r['ok']` is False.
@@ -55,6 +55,25 @@ Recent and base windows of the same seller share customers, so the self test is 
 | `rule_type` | `flag` (flag share or amount flag) or `volume` |
 | `obs_after_alert`, `def_rate_after_alert`, `def_rate_never_alerted`, `lift_after_alert` | **Forward:** matured loans in the `lift_days` (default 30) after each alert, against loans of sellers this rule never alerted, in the same period. This is the one to judge a rule by: would acting on the alert have avoided bad loans? |
 | `obs_in_window`, `def_rate_in_window`, `def_rate_outside`, `lift_in_window` | **Looking back:** matured loans inside the recent window of fired days vs all other matured loans in the anchor range. A seller that fires often covers much of its own history, so this mostly says "the alerted sellers have bad loans" |
+
+`outcomes` (pandas) shows what each rule caught. Per rule there are four rows (`group`):
+
+- `fired`: the seller's transactions inside the **recent window** of every fired day. For a 7 vs 8–15 rule firing on 10 Nov, that's 4–10 Nov.
+- `not_fired`: every other transaction in the anchor range.
+- `alert` / `not_alerted`: the same, using alerts only.
+
+| Column | By transaction | By client (distinct) |
+|---|---|---|
+| Total | `txn` | `client` |
+| Suspicious | `susp_txn` | `susp_client` (has a suspicious transaction in the group) |
+| Observed (matured) | `obs_txn` | `obs_client` |
+| Default (observed and defaulted) | `def_txn` | `def_client` |
+| Rates | `susp_rate_txn` = susp_txn / txn, `def_rate_txn` = def_txn / obs_txn | `susp_rate_client`, `def_rate_client` the same by client |
+
+- Overlapping windows are merged, so a transaction counts once per rule, and distinct clients are exact.
+- A client counts in `not_fired` if they have at least one transaction outside the fired windows, so one client can be in both rows.
+- Only transactions inside the anchor range count; a window starting before it is cut at its first day.
+- Without labels, the suspicious or default columns are left out.
 
 A seller is suspicious from the date of its first transaction matching the suspicious condition, or from the flagged-on date column when given. Labels are optional: without them the summary shows the workload columns only.
 

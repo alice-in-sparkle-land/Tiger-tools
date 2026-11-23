@@ -245,6 +245,43 @@ if spark is not None:
     check('summary has one row per rule with tests',
           len(summ) == summ[['metric', 'comparison', 'unit', 'test']].drop_duplicates().shape[0])
 
+    # outcomes: rebuilt by hand for two rules, both groups, both bases
+    out = r['outcomes']
+    check('outcomes: 4 groups per rule', r['ok'] and set(out['group']) == {'fired', 'not_fired', 'alert', 'not_alerted'}
+          and len(out) == 4 * len(out[['metric', 'comparison', 'unit', 'test']].drop_duplicates()))
+    T = pdf.assign(day=pdf['txn_date'].dt.normalize())
+    T = T[(T['day'] >= a_s) & (T['day'] <= a_e)]
+    T['s'] = T['f_susp'] == 1; T['o'] = T['f_pd30_obs'] == 1; T['x'] = T['o'] & (T['f_pd30'] == 1)
+    rec = {c['name']: c['recent'] for c in CONFIG['comparisons']}
+    def counts(sub, outside_of=None):
+        if outside_of is None:
+            cl = sub.groupby('client_id').agg(s=('s', 'any'), o=('o', 'any'), x=('x', 'any'))
+        else:   # clients with at least one transaction of that kind outside the events
+            cl = sub.groupby('client_id').agg(n=('s', 'size'), s=('s', 'any'), o=('o', 'any'), x=('x', 'any'))
+        return dict(txn=len(sub), susp_txn=int(sub['s'].sum()), obs_txn=int(sub['o'].sum()), def_txn=int(sub['x'].sum()),
+                    client=len(cl), susp_client=int(cl['s'].sum()), obs_client=int(cl['o'].sum()), def_client=int(cl['x'].sum()))
+    ok_all = True
+    for rule in [dict(metric='high_util', comparison='7 vs 8-15', unit='customer', test='self'),
+                 dict(metric='volume', comparison='1 vs 2-8', unit='txn', test='peer')]:
+        s_, e_ = rec[rule['comparison']]
+        for basis, other in [('fired', 'not_fired'), ('alert', 'not_alerted')]:
+            ev = det[(det[list(rule)] == pd.Series(rule)).all(axis=1) & det[basis]]
+            cov = {(m, t - pd.Timedelta(days=b - 1)) for m, t in zip(ev['merchant'], ev['anchor']) for b in range(s_, e_ + 1)}
+            inside = np.array([(m, d) in cov for m, d in zip(T['merchant_id'], T['day'])], dtype=bool)
+            want_in = counts(T[inside])
+            out_t = T[~inside]
+            want_out = counts(out_t)   # rows outside; distinct clients among them
+            for grp, want in [(basis, want_in), (other, want_out)]:
+                got = out[(out[list(rule)] == pd.Series(rule)).all(axis=1) & (out['group'] == grp)].iloc[0]
+                bad = {k: (int(got[k]), v) for k, v in want.items() if int(got[k]) != v}
+                if bad:
+                    ok_all = False; print('   ', rule['metric'], rule['comparison'], grp, bad)
+    check('outcomes = hand rebuild (8 counts, fired / not_fired / alert / not_alerted)', ok_all)
+    f_ = out[out['group'].isin(['fired', 'not_fired'])].groupby(['metric', 'comparison', 'unit', 'test'])['txn'].sum()
+    check('  ... fired + not_fired transactions = all transactions in the anchor range', (f_ == len(T)).all())
+    hu = out[(out['metric'] == 'high_util') & (out['comparison'] == '7 vs 8-15') & (out['test'] == 'self') & (out['unit'] == 'customer')].set_index('group')
+    check('  ... planted: suspicious rate by transaction higher when fired', hu.loc['fired', 'susp_rate_txn'] > 3 * hu.loc['not_fired', 'susp_rate_txn'])
+
     # peer fallback: every h3 cell has 5 other sellers < min_peers 6, so all peer tests fall back to seller_group
     cfg_fb = dict(CONFIG, anchor_start='2026-09-01', min_peers=6, peer_fallback_cols=['seller_group'],
                   susp_cond=None, def_col=None, obs_col=None)
@@ -282,6 +319,8 @@ if spark is not None:
     check('txn only, no peers, no labels: ok', r2['ok'], buf.getvalue()[-500:])
     check('  ... only txn/self rows', set(r2['detail']['unit']) == {'txn'} and set(r2['detail']['test']) == {'self'})
     check('  ... summary without label columns', 'precision' not in r2['summary'].columns)
+    check('  ... outcomes with counts only', list(r2['outcomes'].columns[-4:]) == ['txn', 'client', 'rule_type', 'group'][:0] + list(r2['outcomes'].columns[-4:])
+          and 'susp_txn' not in r2['outcomes'].columns and 'def_txn' not in r2['outcomes'].columns and 'client' in r2['outcomes'].columns)
 
     # failures: one line + not run
     for bad, want in [(dict(CONFIG, merchant_col='nope'), 'columns not in df: nope'),

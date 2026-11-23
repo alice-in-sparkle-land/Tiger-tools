@@ -125,7 +125,8 @@ function generate(){
     '',
     rules+' rules: '+c.metrics.length+' metrics x '+c.comparisons.length+' comparisons x '+c.units.length+' units x '+(c.peer_cols.length?'2 tests':'1 test')+'.',
     '',
-    'Returns detail (one row per tested seller x day x rule) and summary (one row per rule).',
+    'Returns detail (one row per tested seller x day x rule), summary (one row per rule) and outcomes',
+    '(per rule: transactions in the recent window of fired days / alerts vs the rest, by transaction and client).',
     '"""',
     'CONFIG = '+pyLit(c,''),
     '',
@@ -134,7 +135,7 @@ function generate(){
     '',
     '# ---------------------------------------------------------------------------- run',
     'r = run_fisher_backtest(df, CONFIG, spark=spark)',
-    "detail, summary = r['detail'], r['summary']",
+    "detail, summary, outcomes = r['detail'], r['summary'], r['outcomes']",
     'summary',''].join('\n');
 }
 function fileName(){return 'fisher_backtest_'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'.py';}

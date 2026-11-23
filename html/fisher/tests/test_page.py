@@ -142,7 +142,7 @@ if spark is not None:
         exec(open(gen).read(), g)
     log = buf.getvalue()
     check('the generated file runs on df and spark, after from pyspark.sql.functions import *', g['r']['ok'], log[-600:])
-    check('  ... and leaves detail and summary', len(g['detail']) > 0 and len(g['summary']) > 0)
+    check('  ... and leaves detail, summary and outcomes', len(g['detail']) > 0 and len(g['summary']) > 0 and len(g['outcomes']) > 0)
     check('  ... the planted sellers alert', set(g['detail'].loc[g['detail']['alert'], 'merchant']) >= {'M04', 'M07'})
     print(g['summary'].head(8).to_string())
     spark.stop()
