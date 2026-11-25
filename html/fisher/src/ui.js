@@ -7,25 +7,31 @@ const IDENT=/^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEF={
   cols:{date:'txn_date',merchant:'merchant_id',customer:'client_id',amount:'txn_amount'},
   units:{customer:true,txn:true},
-  metrics:[{name:'high_util',kind:'flag',expr:'utilization > 0.9',op:'>=',value:''},
-           {name:'big_ticket',kind:'amount',expr:'',op:'>=',value:'5000000'},
-           {name:'volume',kind:'volume',expr:'',op:'>=',value:''}],
+  metrics:[{name:'high_util',kind:'flag',expr:'utilization > 0.9',op:'>=',value:'',from:'',to:'',level:'90'},
+           {name:'big_ticket',kind:'amount',expr:'',op:'>=',value:'5000000',from:'',to:'',level:'90'},
+           {name:'big_rel',kind:'rel',expr:'',op:'>=',value:'',from:'',to:'',level:'90'},
+           {name:'volume',kind:'volume',expr:'',op:'>=',value:'',from:'',to:'',level:'90'},
+           {name:'money_surge',kind:'money',expr:'',op:'>=',value:'',from:'',to:'',level:'90'}],
   comps:[{rs:1,re:1,bs:2,be:8},{rs:1,re:7,bs:8,be:15},{rs:1,re:7,bs:8,be:35},{rs:1,re:30,bs:31,be:90}],
   anchor:{start:'',end:'',skipLast:false},
-  peer:{on:true,cols:'seller_group, h3_9',min:'3',fallback:''},
+  peer:{on:true,groups:['seller_group','h3_9','seller_group, h3_9'],min:'3'},
   labels:{susp:'f_suspicious = 1',suspDate:'',def:'f_pd30',obs:'f_pd30_obs',liftDays:'30'},
   rule:{q:'0.05',or:'2',cooldown:'7',minTotal:'10',minFlag:'5',maxRows:'3000000',bh:'rule'}
 };
 const clone=o=>JSON.parse(JSON.stringify(o));
+const KINDS=[['flag','Flag share'],['amount','Amount flag'],['range','Amount range'],['rel','Relative amount'],['money','Money surge'],['volume','Volume']];
+const NEEDS_AMT=['amount','range','rel','money'];
 let state=clone(DEF),storageOk=true,pending=null;
 
 /* ---------- state ---------- */
 function sanitize(o){
   const s=clone(DEF);if(!o||typeof o!=='object')return s;
   ['cols','units','anchor','peer','labels','rule'].forEach(g=>{if(o[g]&&typeof o[g]==='object')Object.keys(s[g]).forEach(k=>{
-    if(k in o[g]&&o[g][k]!==null&&typeof o[g][k]===typeof s[g][k])s[g][k]=o[g][k];});});
+    if(k in o[g]&&o[g][k]!==null&&typeof o[g][k]===typeof s[g][k]&&Array.isArray(o[g][k])===Array.isArray(s[g][k]))s[g][k]=o[g][k];});});
+  s.peer.groups=s.peer.groups.map(String);
   if(Array.isArray(o.metrics))s.metrics=o.metrics.filter(m=>m&&typeof m==='object').map(m=>({name:String(m.name||''),
-    kind:['flag','amount','volume'].includes(m.kind)?m.kind:'flag',expr:String(m.expr||''),op:['>=','>','<=','<'].includes(m.op)?m.op:'>=',value:String(m.value||'')}));
+    kind:KINDS.map(k=>k[0]).includes(m.kind)?m.kind:'flag',expr:String(m.expr||''),op:['>=','>','<=','<'].includes(m.op)?m.op:'>=',
+    value:String(m.value||''),from:String(m.from||''),to:String(m.to||''),level:String(m.level||'90')}));
   if(Array.isArray(o.comps))s.comps=o.comps.filter(c=>c&&typeof c==='object').map(c=>({rs:+c.rs||0,re:+c.re||0,bs:+c.bs||0,be:+c.be||0}));
   return s;
 }
@@ -55,7 +61,13 @@ function validate(){
     else if(seen[n])add('m'+i,'Two metrics are called '+n+'.');seen[n]=1;
     if(m.kind==='flag'&&!m.expr.trim())add('m'+i,'Write the SQL condition.');
     if(m.kind==='flag'&&/;|--/.test(m.expr))add('m'+i,'The condition must be one expression, without ; or --.');
-    if(m.kind==='amount'){if(!state.cols.amount.trim())add('m'+i,'Fill in the Amount column first (section 1).');if(!isNum(m.value))add('m'+i,'Enter a number.');}});
+    if(NEEDS_AMT.includes(m.kind)&&!state.cols.amount.trim())add('m'+i,'Fill in the Amount column first (section 1).');
+    if(m.kind==='amount'&&!isNum(m.value))add('m'+i,'Enter a number.');
+    if(m.kind==='range'){if(!isNum(m.from)||!isNum(m.to))add('m'+i,'Enter both amounts.');else if(+m.from>=+m.to)add('m'+i,'From must be below To.');}
+    if(m.kind==='rel'&&(!isNum(m.level)||+m.level<50||+m.level>=100))add('m'+i,'Percentile between 50 and 99.9.');});
+  const exp=[];state.metrics.forEach(m=>{const n=m.name.trim();if(m.kind!=='rel'){exp.push(n);return;}
+    const gs=state.peer.on?state.peer.groups.map(list).filter(g=>g.length):[];(gs.length?gs:[['all']]).forEach(g=>exp.push(n+'_'+g.join('_')));});
+  const dup=exp.filter((n,i)=>n&&exp.indexOf(n)!==i);if(dup.length)add('metrics','Metric names clash after relative amount adds one per group: '+[...new Set(dup)].join(', ')+'.');
   if(!state.comps.length)add('comps','Add at least one comparison.');
   const cs={};
   state.comps.forEach((c,i)=>{const v=[c.rs,c.re,c.bs,c.be];
@@ -65,11 +77,11 @@ function validate(){
     const n=cmpName(c);if(cs[n])add('c'+i,'Same comparison twice.');cs[n]=1;});
   ['start','end'].forEach(k=>{const v=state.anchor[k].trim();if(v&&!isDate(v))add('anchor.'+k,'Use YYYY-MM-DD.');});
   if(isDate(state.anchor.start)&&isDate(state.anchor.end)&&state.anchor.start>state.anchor.end)add('anchor.end','Must be after From.');
-  if(state.peer.on){const pc=list(state.peer.cols);if(!pc.length)add('peer.cols','List at least one column, or untick the peer check.');
-    else if(!pc.every(c=>IDENT.test(c)))add('peer.cols','Comma-separated plain column names.');
-    if(!isInt(state.peer.min)||+state.peer.min<1)add('peer.min','A whole number, 1 or more.');
-    const fc=list(state.peer.fallback);if(fc.length&&!fc.every(c=>IDENT.test(c)))add('peer.fallback','Comma-separated plain column names.');
-    else if(fc.length&&fc.join(',')===pc.join(','))add('peer.fallback','Use a coarser group than the peer group.');}
+  if(state.peer.on){if(!state.peer.groups.length)add('peer.groups','Add at least one peer group, or untick the peer check.');
+    const seen2={};state.peer.groups.forEach((g,i)=>{const pc=list(g);
+      if(!pc.length)add('g'+i,'List at least one column.');else if(!pc.every(c=>IDENT.test(c)))add('g'+i,'Comma-separated plain column names.');
+      const key=pc.join('+');if(pc.length&&seen2[key])add('g'+i,'Same group twice.');seen2[key]=1;});
+    if(!isInt(state.peer.min)||+state.peer.min<1)add('peer.min','A whole number, 1 or more.');}
   const L=state.labels;
   if(L.suspDate.trim()&&!IDENT.test(L.suspDate.trim()))add('labels.suspDate','Use a plain column name.');
   if(L.suspDate.trim()&&!L.susp.trim())add('labels.suspDate','Only used with a suspicious condition.');
@@ -86,15 +98,22 @@ function validate(){
 
 /* ---------- Python output ---------- */
 const py=v=>v===null||v===undefined?'None':v===true?'True':v===false?'False':typeof v==='number'?String(v):JSON.stringify(String(v));
-function metricExpr(m){return m.kind==='amount'?state.cols.amount.trim()+' '+m.op+' '+(+m.value):m.expr.trim();}
+function metricExpr(m){const a=state.cols.amount.trim();
+  return m.kind==='amount'?a+' '+m.op+' '+(+m.value):m.kind==='range'?a+' BETWEEN '+(+m.from)+' AND '+(+m.to):m.expr.trim();}
+function metricCfg(m){const n=m.name.trim();
+  if(m.kind==='volume')return {name:n,kind:'volume'};
+  if(m.kind==='money')return {name:n,kind:'money'};
+  if(m.kind==='rel')return {name:n,kind:'rel_amount',level:Math.round(+m.level*10)/1000};
+  return {name:n,kind:'flag',expr:metricExpr(m)};}
 function config(){
   const R=state.rule,L=state.labels;
   return {
     date_col:state.cols.date.trim(),merchant_col:state.cols.merchant.trim(),customer_col:state.cols.customer.trim(),
-    metrics:state.metrics.map(m=>m.kind==='volume'?{name:m.name.trim(),kind:'volume'}:{name:m.name.trim(),kind:'flag',expr:metricExpr(m)}),
+    metrics:state.metrics.map(metricCfg),
     comparisons:state.comps.map(c=>({name:cmpName(c),recent:[c.rs,c.re],base:[c.bs,c.be]})),
     units:['customer','txn'].filter(u=>state.units[u]),
-    peer_cols:state.peer.on?list(state.peer.cols):[],min_peers:+state.peer.min||1,peer_fallback_cols:state.peer.on?list(state.peer.fallback):[],
+    peer_groups:state.peer.on?state.peer.groups.map(list).filter(g=>g.length):[],min_peers:+state.peer.min||1,
+    amount_col:state.cols.amount.trim()||null,
     anchor_start:state.anchor.start.trim()||null,anchor_end:state.anchor.end.trim()||null,skip_last_day:state.anchor.skipLast,
     min_total:+R.minTotal,min_flag:+R.minFlag,q_max:+R.q,or_min:+R.or,cooldown:+R.cooldown,max_rows:+R.maxRows,bh_scope:R.bh==='day'?'day':'rule',
     susp_cond:L.susp.trim()||null,susp_date_col:L.suspDate.trim()||null,def_col:L.def.trim()||null,obs_col:L.obs.trim()||null,lift_days:+L.liftDays||30
@@ -112,7 +131,7 @@ function pyLit(v,ind){
 }
 function generate(){
   const c=config(),d=new Date().toISOString().slice(0,10);
-  const rules=c.metrics.length*c.comparisons.length*c.units.length*(c.peer_cols.length?2:1);
+  const tests='self'+c.peer_groups.map(g=>', peer:'+g.join('+')).join('');
   return ['"""Fisher backtest, generated '+d+' by Tiger Tools html/fisher (Fisher Backtest Builder).',
     '',
     'Paste into a notebook cell where `spark` and `df` (transaction level) already exist,',
@@ -123,7 +142,9 @@ function generate(){
     'builds a 2x2 table and runs a one-sided Fisher exact test. A rule fires when the BH q-value',
     '(over all sellers that day) <= q_max and the odds ratio >= or_min.',
     '',
-    rules+' rules: '+c.metrics.length+' metrics x '+c.comparisons.length+' comparisons x '+c.units.length+' units x '+(c.peer_cols.length?'2 tests':'1 test')+'.',
+    c.metrics.length+' metrics x '+c.comparisons.length+' comparisons x '+c.units.length+' count units; tests: '+tests+'.',
+    'Money surge metrics run self only, on daily total amount (rank test), in unit "amount".',
+    'detail has recent_start/recent_end (days behind a, b) and ref_start/ref_end (days behind c, d).',
     '',
     'Returns detail (one row per tested seller x day x rule), summary (one row per rule) and outcomes',
     '(per rule: transactions in the recent window of fired days / alerts vs the rest, by transaction and client).',
@@ -144,12 +165,16 @@ function fileName(){return 'fisher_backtest_'+new Date().toISOString().slice(0,1
 function renderLists(){
   $('#metrics').innerHTML=state.metrics.map((m,i)=>'<div class="item" data-i="'+i+'"><div class="ihead">'+
     '<input class="in" data-m="name" value="'+esc(m.name)+'" placeholder="metric_name" aria-label="Metric name">'+
-    '<select data-m="kind" aria-label="Kind">'+[['flag','Flag share'],['amount','Amount flag'],['volume','Volume']].map(([v,t])=>'<option value="'+v+'"'+(m.kind===v?' selected':'')+'>'+t+'</option>').join('')+'</select>'+
+    '<select data-m="kind" aria-label="Kind">'+KINDS.map(([v,t])=>'<option value="'+v+'"'+(m.kind===v?' selected':'')+'>'+t+'</option>').join('')+'</select>'+
     '<button class="x" data-del-m="'+i+'" aria-label="Remove metric">Remove</button></div>'+
     (m.kind==='flag'?'<div class="irow"><input class="in" data-m="expr" value="'+esc(m.expr)+'" placeholder="utilization > 0.9" aria-label="SQL condition"></div>':'')+
     (m.kind==='amount'?'<div class="irow"><code>'+esc(state.cols.amount||'amount')+'</code><select data-m="op" aria-label="Operator">'+['>=','>','<=','<'].map(o=>'<option'+(m.op===o?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select><input class="in" data-m="value" value="'+esc(m.value)+'" inputmode="decimal" style="flex:1 1 120px" aria-label="Amount"></div>':'')+
-    (m.kind==='volume'?'<div class="irow muted">Seller\'s share of all transactions (self) or of its peer group (peer).</div>':'')+
+    (m.kind==='range'?'<div class="irow"><code>'+esc(state.cols.amount||'amount')+'</code> from<input class="in" data-m="from" value="'+esc(m.from)+'" inputmode="decimal" style="flex:1 1 90px" aria-label="From amount">to<input class="in" data-m="to" value="'+esc(m.to)+'" inputmode="decimal" style="flex:1 1 90px" aria-label="To amount"></div>':'')+
+    (m.kind==='rel'?'<div class="irow"><span>Percentile</span><input class="in num" data-m="level" value="'+esc(m.level)+'" inputmode="decimal" aria-label="Percentile"><span class="muted">of the peer group\'s amounts</span></div><div class="hint" style="margin:6px 0 0">Flags a transaction above that percentile. One metric per peer group (<code>'+esc(m.name||'name')+'_&lt;group&gt;</code>). Percentiles use only data before the first anchor day.</div>':'')+
+    (m.kind==='money'?'<div class="irow muted">Rank test (Mann-Whitney) on the seller\'s daily total amount, recent days vs base days; no-sale days count as 0. Self only. Skips comparisons with a recent window under 3 days. Fires on q alone.</div>':'')+
+    (m.kind==='volume'?'<div class="irow muted">Seller\'s share of all transactions (self) or of each peer group (peer).</div>':'')+
     '<div class="err" id="e-m'+i+'"></div></div>').join('');
+  $('#pgroups').innerHTML=state.peer.groups.map((g,i)=>'<div class="cmp pg" data-i="'+i+'"><div class="chead"><input class="in" data-g="'+i+'" value="'+esc(g)+'" placeholder="seller_group, h3_9" aria-label="Peer group columns" style="flex:1;margin:0"><button class="x" data-del-g="'+i+'" aria-label="Remove peer group">Remove</button></div><div class="muted" style="font-size:12.5px;margin-top:4px">test: <code>peer:'+esc(list(g).join('+')||'?')+'</code></div><div class="err" id="e-g'+i+'"></div></div>').join('');
   const win=(lab,k1,k2,c)=>'<span class="win"><span class="wl">'+lab+'</span><input class="in num" data-c="'+k1+'" value="'+c[k1]+'" inputmode="numeric" aria-label="'+lab+' from">–<input class="in num" data-c="'+k2+'" value="'+c[k2]+'" inputmode="numeric" aria-label="'+lab+' to"></span>';
   $('#comps').innerHTML=state.comps.map((c,i)=>'<div class="cmp" data-i="'+i+'"><div class="chead"><span class="name">'+esc(cmpName(c))+'</span><button class="x" data-del-c="'+i+'" aria-label="Remove comparison">Remove</button></div>'+
     '<div class="wins">'+win('Recent','rs','re',c)+win('Base','bs','be',c)+'</div><div class="err" id="e-c'+i+'"></div></div>').join('');
@@ -161,6 +186,7 @@ function refresh(){
   document.querySelectorAll('[data-k]').forEach(el=>{el.classList.toggle('bad',!!E[el.dataset.k]);
     let n=el.parentElement.querySelector('.err.f');if(E[el.dataset.k]){if(!n){n=document.createElement('div');n.className='err f';el.parentElement.appendChild(n);}n.textContent=E[el.dataset.k].join(' ');}else if(n)n.remove();});
   state.metrics.forEach((m,i)=>{const e=$('#e-m'+i);if(e)e.textContent=(E['m'+i]||[]).join(' ');});
+  state.peer.groups.forEach((g,i)=>{const e=$('#e-g'+i);if(e)e.textContent=(E['g'+i]||[]).join(' ');const t=document.querySelector('.pg[data-i="'+i+'"] code');if(t)t.textContent='peer:'+(list(g).join('+')||'?');});
   state.comps.forEach((c,i)=>{const e=$('#e-c'+i);if(e)e.textContent=(E['c'+i]||[]).join(' ');const n=document.querySelector('.cmp[data-i="'+i+'"] .name');if(n)n.textContent=cmpName(c);});
   const all=Object.entries(E);
   $('#errs').innerHTML=all.length?'<div class="errs"><b>Fix '+all.length+' '+(all.length===1?'thing':'things')+' before using the file:</b><ul>'+all.map(([k,v])=>'<li>'+esc(where(k))+': '+esc(v.join(' '))+'</li>').join('')+'</ul></div>':'';
@@ -168,8 +194,9 @@ function refresh(){
 }
 function where(k){if(/^m\d+$/.test(k)){const m=state.metrics[+k.slice(1)];return 'Metric '+(m&&m.name?m.name:'#'+(+k.slice(1)+1));}
   if(/^c\d+$/.test(k))return 'Comparison '+(+k.slice(1)+1);
+  if(/^g\d+$/.test(k))return 'Peer group '+(+k.slice(1)+1);
   const N={'cols.date':'Date column','cols.merchant':'Seller column','cols.customer':'Customer column','cols.amount':'Amount column',units:'Count by',metrics:'Metrics',comps:'Comparisons',
-    'anchor.start':'Anchor from','anchor.end':'Anchor to','peer.cols':'Peer columns','peer.min':'Min other sellers','peer.fallback':'Fallback group','labels.liftDays':'Days after an alert','labels.susp':'Suspicious condition','labels.suspDate':'Flagged-on date',
+    'anchor.start':'Anchor from','anchor.end':'Anchor to','peer.groups':'Peer groups','peer.min':'Min other sellers','labels.liftDays':'Days after an alert','labels.susp':'Suspicious condition','labels.suspDate':'Flagged-on date',
     'labels.def':'Default column','labels.obs':'Observed column','rule.q':'q-value','rule.or':'Odds ratio','rule.cooldown':'Cooldown','rule.minTotal':'Min recent total','rule.minFlag':'Min flagged','rule.maxRows':'Max rows'};
   return N[k]||k;}
 function all(){renderFields();renderLists();refresh();}
@@ -195,16 +222,19 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.addEventListener('input',e=>{const t=e.target;
     if(t.dataset.k&&t.type!=='checkbox'){setK(t.dataset.k,t.value);if(t.dataset.k==='cols.amount')document.querySelectorAll('.irow code').forEach(c=>c.textContent=t.value||'amount');}
     else if(t.dataset.m){const i=+t.closest('.item').dataset.i;state.metrics[i][t.dataset.m]=t.value;}
+    else if(t.dataset.g!==undefined){state.peer.groups[+t.dataset.g]=t.value;}
     else if(t.dataset.c){const i=+t.closest('.cmp').dataset.i,v=t.value.trim();state.comps[i][t.dataset.c]=/^\d+$/.test(v)?+v:NaN;}
     else return;save();refresh();});
   document.addEventListener('change',e=>{const t=e.target;
     if(t.dataset.k&&t.type==='checkbox'){setK(t.dataset.k,t.checked);save();refresh();}
     if(t.dataset.m==='kind'||t.dataset.m==='op'){const i=+t.closest('.item').dataset.i;state.metrics[i][t.dataset.m]=t.value;save();renderLists();refresh();}
     if(t.classList.contains('themeSel')){try{localStorage.setItem(TKEY,t.value);}catch(err){}applyTheme(t.value);}});
-  document.addEventListener('click',e=>{const t=e.target.closest('[data-del-m],[data-del-c]');if(!t)return;
-    if(t.dataset.delM!==undefined)state.metrics.splice(+t.dataset.delM,1);else state.comps.splice(+t.dataset.delC,1);save();renderLists();refresh();});
+  document.addEventListener('click',e=>{const t=e.target.closest('[data-del-m],[data-del-c],[data-del-g]');if(!t)return;
+    if(t.dataset.delM!==undefined)state.metrics.splice(+t.dataset.delM,1);else if(t.dataset.delG!==undefined)state.peer.groups.splice(+t.dataset.delG,1);
+    else state.comps.splice(+t.dataset.delC,1);save();renderLists();refresh();});
+  $('#addGroup').onclick=()=>{state.peer.groups.push('');save();renderLists();refresh();const l=document.querySelectorAll('[data-g]');l[l.length-1].focus();};
   $('#addMetric').onclick=()=>{let n=state.metrics.length+1;while(state.metrics.some(m=>m.name==='metric_'+n))n++;
-    state.metrics.push({name:'metric_'+n,kind:'flag',expr:'',op:'>=',value:''});save();renderLists();refresh();document.querySelector('.item:last-child [data-m="expr"]').focus();};
+    state.metrics.push({name:'metric_'+n,kind:'flag',expr:'',op:'>=',value:'',from:'',to:'',level:'90'});save();renderLists();refresh();document.querySelector('.item:last-child [data-m="expr"]').focus();};
   $('#addComp').onclick=()=>{state.comps.push({rs:1,re:14,bs:15,be:60});save();renderLists();refresh();};
   $('#reset').onclick=()=>sheet('<h3>Reset</h3><p>Go back to the example settings? Your current settings are lost unless you export them first.</p><div class="row-end"><button data-s="close">Cancel</button><button class="primary" data-s="reset">Reset</button></div>');
   $('#copy').onclick=async()=>{if(Object.keys(lastErr).length)return banner('Fix the problems listed above first.',true);

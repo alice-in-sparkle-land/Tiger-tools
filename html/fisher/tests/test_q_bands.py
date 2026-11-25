@@ -33,7 +33,8 @@ T = pdf.assign(day=pdf['txn_date'].dt.normalize()); T = T[(T['day'] >= a_s) & (T
 T['s'] = T['f_susp'] == 1; T['o'] = T['f_pd30_obs'] == 1; T['x'] = T['o'] & (T['f_pd30'] == 1)
 rec = {c['name']: c['recent'] for c in CONFIG['comparisons']}
 for rule in [dict(metric='high_util', comparison='7 vs 8-15', unit='customer', test='self'),
-             dict(metric='volume', comparison='30 vs 31-60', unit='txn', test='peer'),
+             dict(metric='volume', comparison='30 vs 31-60', unit='txn', test='peer:h3_9'),
+             dict(metric='money_surge', comparison='7 vs 8-15', unit='amount', test='self'),
              dict(metric='big_ticket', comparison='1 vs 2-8', unit='txn', test='self')]:
     d = det[(det[list(rule)] == pd.Series(rule)).all(axis=1)]
     s_, e_ = rec[rule['comparison']]
@@ -54,7 +55,7 @@ for rule in [dict(metric='high_util', comparison='7 vs 8-15', unit='customer', t
             n = ((pd.cut(d['q'], bands, labels=False, include_lowest=True) == b)).sum()
             if int(got['seller_days']) != n: ok = False; print('seller_days', lab, got['seller_days'], n)
 tot = qb.groupby(['metric', 'comparison', 'unit', 'test'])['txn'].sum()
-checks = [('q bands = brute force (3 rules, 6 bands, 8 counts and seller_days)', ok),
+checks = [('q bands = brute force (4 rules incl. money surge, 6 bands, 8 counts and seller_days)', ok),
           ('bands add up to all transactions, every rule', bool((tot == len(T)).all())),
           ('6 bands per rule', len(qb) == 6 * len(tot))]
 for name, c in checks:

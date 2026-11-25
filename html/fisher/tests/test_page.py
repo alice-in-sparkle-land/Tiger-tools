@@ -45,7 +45,7 @@ with sync_playwright() as p:
         except SyntaxError as e:
             ok = False; print(e)
         check('generated file compiles', ok)
-        check('4 comparisons listed', pg.locator('.cmp').count() == 4)
+        check('4 comparisons listed', pg.locator('#comps .cmp').count() == 4)
         check('amount metric turns into an expression', '"txn_amount >= 5000000"' in code)
 
         # edit a field -> code follows
@@ -59,29 +59,40 @@ with sync_playwright() as p:
         check('  ... download says to fix first', 'Fix the problems' in pg.inner_text('#banner'))
         pg.locator('.item').first.locator('[data-m="name"]').fill('high_util')
         # overlapping comparison
-        pg.locator('.cmp').nth(1).locator('[data-c="bs"]').fill('5')
+        pg.locator('#comps .cmp').nth(1).locator('[data-c="bs"]').fill('5')
         check('overlapping windows: error shown', 'overlaps' in pg.inner_text('#errs'))
-        pg.locator('.cmp').nth(1).locator('[data-c="bs"]').fill('8')
+        pg.locator('#comps .cmp').nth(1).locator('[data-c="bs"]').fill('8')
         # add / remove
         pg.click('#addMetric')
-        check('add metric: new item, needs a condition', pg.locator('.item').count() == 4 and 'Write the SQL condition' in pg.inner_text('#errs'))
-        pg.locator('.item').nth(3).locator('[data-del-m]').click()
+        check('add metric: new item, needs a condition', pg.locator('.item').count() == 6 and 'Write the SQL condition' in pg.inner_text('#errs'))
+        pg.locator('.item').nth(5).locator('[data-m="kind"]').select_option('range')
+        pg.locator('.item').nth(5).locator('[data-m="from"]').fill('9000000')
+        pg.locator('.item').nth(5).locator('[data-m="to"]').fill('8000000')
+        check('amount range: From must be below To', 'From must be below To' in pg.inner_text('#errs'))
+        pg.locator('.item').nth(5).locator('[data-m="to"]').fill('9999999')
+        check('amount range becomes a BETWEEN flag', '"txn_amount BETWEEN 9000000 AND 9999999"' in pg.inner_text('#code'))
+        pg.locator('.item').nth(5).locator('[data-del-m]').click()
+        code = pg.inner_text('#code')
+        check('relative amount and money surge reach the file', '"kind": "rel_amount", "level": 0.9' in code
+              and '"kind": "money"' in code and '"amount_col": "txn_amount"' in code)
         pg.click('#addComp')
         check('add comparison 14 vs 15-60', '14 vs 15-60' in pg.inner_text('#code'))
-        pg.locator('.cmp').nth(4).locator('[data-del-c]').click()
+        pg.locator('#comps .cmp').nth(4).locator('[data-del-c]').click()
         # peers off
         pg.uncheck('[data-k="peer.on"]')
-        check('peer check off: peer_cols []', '"peer_cols": []' in pg.inner_text('#code'))
+        check('peer check off: peer_groups []', '"peer_groups": []' in pg.inner_text('#code'))
         pg.check('[data-k="peer.on"]')
-        pg.fill('[data-k="peer.fallback"]', 'seller_group')
+        code = pg.inner_text('#code')
+        check('three peer groups by default', '["seller_group"]' in code and '["h3_9"]' in code and '["seller_group", "h3_9"]' in code)
+        pg.click('#addGroup'); pg.locator('[data-g]').nth(3).fill('h3_9')
+        check('same peer group twice: error', 'Same group twice' in pg.inner_text('#errs'))
+        pg.locator('[data-g]').nth(3).fill('seller_group, city')
+        check('a fourth group reaches the file', '["seller_group", "city"]' in pg.inner_text('#code'))
+        pg.locator('[data-del-g]').nth(3).click()
         pg.select_option('[data-k="rule.bh"]', 'day')
         pg.fill('[data-k="labels.liftDays"]', '45')
         code = pg.inner_text('#code')
-        check('fallback, BH scope and lift days reach the file', '"peer_fallback_cols": ["seller_group"]' in code
-              and '"bh_scope": "day"' in code and '"lift_days": 45' in code)
-        pg.fill('[data-k="peer.fallback"]', 'seller_group, h3_9')
-        check('fallback same as the peer group: error', 'coarser group' in pg.inner_text('#errs'))
-        pg.fill('[data-k="peer.fallback"]', 'seller_group')
+        check('BH scope and lift days reach the file', '"bh_scope": "day"' in code and '"lift_days": 45' in code)
         # settings survive reload
         pg.reload(); pg.wait_for_timeout(300)
         check('settings kept after reload', pg.input_value('[data-k="cols.merchant"]') == 'seller_id')
@@ -110,9 +121,8 @@ with sync_playwright() as p:
     pg.fill('[data-k="labels.susp"]', 'f_susp = 1')
     pg.uncheck('[data-k="units.customer"]')                         # transactions only: quicker
     for i in (3, 2):
-        pg.locator('.cmp').nth(i).locator('[data-del-c]').click()   # keep 1 vs 2-8 and 7 vs 8-15
+        pg.locator('#comps .cmp').nth(i).locator('[data-del-c]').click()   # keep 1 vs 2-8 and 7 vs 8-15
     pg.fill('[data-k="anchor.start"]', '2026-08-15')
-    pg.fill('[data-k="peer.fallback"]', 'seller_group')
     with pg.expect_download() as d:
         pg.click('#dl')
     gen = os.path.join(OUT, d.value.suggested_filename); d.value.save_as(gen)
@@ -143,7 +153,10 @@ if spark is not None:
     log = buf.getvalue()
     check('the generated file runs on df and spark, after from pyspark.sql.functions import *', g['r']['ok'], log[-600:])
     check('  ... and leaves detail, summary and outcomes', len(g['detail']) > 0 and len(g['summary']) > 0 and len(g['outcomes']) > 0)
-    check('  ... the planted sellers alert', set(g['detail'].loc[g['detail']['alert'], 'merchant']) >= {'M04', 'M07'})
+    check('  ... the planted sellers alert', set(g['detail'].loc[g['detail']['alert'], 'merchant']) >= {'M04', 'M07', 'M10'})
+    dd = g['detail']
+    check('  ... tests self + 3 peer groups, money surge rows, dates', {'peer:seller_group', 'peer:h3_9', 'peer:seller_group+h3_9'} <= set(dd['test'])
+          and (dd['unit'] == 'amount').any() and {'recent_start', 'recent_end', 'ref_start', 'ref_end'} <= set(dd.columns))
     print(g['summary'].head(8).to_string())
     spark.stop()
 

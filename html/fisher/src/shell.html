@@ -31,7 +31,7 @@
 
   <section class="card">
     <h2>2. Metrics</h2>
-    <p class="hint"><b>Flag share</b>: any SQL condition on a transaction. <b>Amount flag</b>: amount above or below a value. <b>Volume</b>: the seller's share of all transactions (self test) or of its peer group (peer test).</p>
+    <p class="hint"><b>Flag share</b>: any SQL condition on a transaction. <b>Amount flag</b>: amount above or below a value. <b>Amount range</b>: amount between two values (e.g. just under a limit). <b>Relative amount</b>: amount above a percentile of the seller's peer group. These are all tested with Fisher on counts. <b>Money surge</b>: the seller's daily total amount, recent vs base days (rank test). <b>Volume</b>: the seller's share of all transactions (self) or of each peer group (peer).</p>
     <div id="metrics"></div>
     <button id="addMetric" class="wide">+ Add metric</button>
   </section>
@@ -52,12 +52,13 @@
   <section class="card">
     <h2>4. Peer check</h2>
     <label class="chip"><input type="checkbox" data-k="peer.on"> Compare each seller with its peers</label>
-    <div class="grid" style="margin-top:8px">
-      <label>Peer group columns<input class="in" data-k="peer.cols" placeholder="seller_group, h3_9"></label>
+    <div class="sub">Peer groups <span class="muted">(one peer test each)</span></div>
+    <div id="pgroups"></div>
+    <button id="addGroup" class="wide">+ Add peer group</button>
+    <div class="grid" style="margin-top:10px">
       <label>Min other sellers<input class="in" data-k="peer.min" inputmode="numeric"></label>
-      <label>Fallback group columns <span class="muted">(optional)</span><input class="in" data-k="peer.fallback" placeholder="seller_group"></label>
     </div>
-    <p class="hint">Peers = the other sellers with the same values in these columns, in the same recent window. The seller itself is always left out. Counting by customers, its own customers are left out of the peer row too, so the two rows never share a person. When the group has fewer other sellers than the minimum, the fallback group (coarser, e.g. <code>seller_group</code> alone) is used instead; <code>detail.peer_level</code> says which.</p>
+    <p class="hint">Peers = the other sellers with the same values in these columns, in the same recent window. The seller itself is always left out. Counting by customers, its own customers are left out of the peer row too, so the two rows never share a person. Each group is its own test, e.g. <code>peer:seller_group</code>, <code>peer:h3_9</code>, <code>peer:seller_group+h3_9</code>; a test runs only when the group has at least the minimum of other sellers.</p>
   </section>
 
   <section class="card">

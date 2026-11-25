@@ -12,9 +12,9 @@ _sum, _max, _min, _round = _bi.sum, _bi.max, _bi.min, _bi.round
 
 DEFAULTS = {
     'units':        ['customer', 'txn'],   # count by distinct customers, by transactions, or both
-    'peer_cols':    [],                    # e.g. ['seller_group', 'h3_9']; [] = no peer test
-    'min_peers':    3,                     # other sellers needed in the peer group
-    'peer_fallback_cols': [],              # e.g. ['seller_group']: coarser group used when the first has too few sellers
+    'peer_groups':  [],                    # e.g. [['seller_group'], ['h3_9'], ['seller_group', 'h3_9']]: one peer test each
+    'min_peers':    3,                     # other sellers needed in a peer group
+    'amount_col':   None,                  # transaction amount, for 'rel_amount' and 'money' metrics
     'anchor_start': None,                  # 'YYYY-MM-DD'; None = first day with every window inside the data
     'anchor_end':   None,                  # 'YYYY-MM-DD'; None = last day in df
     'skip_last_day': False,                # True: drop the last day in df (partly loaded)
@@ -118,6 +118,56 @@ def bh_qvalues(p, n_family):
     return out
 
 
+_MW_CACHE = {}
+
+
+def _mw_exact_sf(n1, n2):
+    """Exact null distribution of the Mann-Whitney U (no ties): sf[u] = P(U >= u)."""
+    key = (n1, n2)
+    if key not in _MW_CACHE:
+        # w[j][u] = number of arrangements of i recent and j base values with U = u, built up over i
+        prev = [np.zeros(1) for _ in range(n2 + 1)]
+        for j in range(n2 + 1):
+            prev[j][0] = 1.0                      # i = 0: one way, U = 0
+        for i in range(1, n1 + 1):
+            cur = [None] * (n2 + 1)
+            cur[0] = np.zeros(1); cur[0][0] = 1.0
+            for j in range(1, n2 + 1):
+                a_ = np.zeros(i * j + 1)
+                a_[j:j + len(prev[j])] += prev[j]  # largest value is recent: it beats all j base values
+                a_[:len(cur[j - 1])] += cur[j - 1]  # largest value is base
+                cur[j] = a_
+            prev = cur
+        cnt = prev[n2]
+        _MW_CACHE[key] = np.cumsum(cnt[::-1])[::-1] / cnt.sum()
+    return _MW_CACHE[key]
+
+
+def mannwhitney_greater(X, Y, exact_max=40):
+    """One-sided Mann-Whitney test, alternative: values in X tend to be larger than in Y.
+    X: (rows, n1), Y: (rows, n2). Returns U and p per row. Exact p when a row has no ties and
+    n1 + n2 <= exact_max; otherwise the normal approximation with tie and continuity correction
+    (as scipy.stats.mannwhitneyu(..., alternative='greater'))."""
+    X, Y = np.asarray(X, dtype=float), np.asarray(Y, dtype=float)
+    n1, n2 = X.shape[1], Y.shape[1]
+    U = (X[:, :, None] > Y[:, None, :]).sum(axis=(1, 2)) + 0.5 * (X[:, :, None] == Y[:, None, :]).sum(axis=(1, 2))
+    Z = np.concatenate([X, Y], axis=1)
+    n = n1 + n2
+    t = (Z[:, :, None] == Z[:, None, :]).sum(axis=2)          # size of each value's tie group
+    ties = (t ** 2 - 1).sum(axis=1)                           # = sum over groups of (t^3 - t)
+    mu = n1 * n2 / 2.0
+    var = n1 * n2 / 12.0 * ((n + 1) - ties / (n * (n - 1.0)))
+    sd = np.sqrt(np.maximum(var, 0))
+    z = np.where(sd > 0, (U - mu - 0.5) / np.where(sd > 0, sd, 1), -np.inf)
+    erfc = np.frompyfunc(math.erfc, 1, 1)
+    p = np.asarray(erfc(z / math.sqrt(2.0)), dtype=float) / 2.0
+    exact = (ties == 0) & (n <= exact_max)
+    if exact.any():
+        sf = _mw_exact_sf(n1, n2)
+        p[exact] = sf[U[exact].astype(int)]
+    return U, np.clip(p, 0.0, 1.0)
+
+
 # ---------------------------------------------------------------------------- Spark counts
 def _windows(comparisons):
     """Distinct day windows (start, end) used by all comparisons; day 1 = the anchor day."""
@@ -131,13 +181,13 @@ def _windows(comparisons):
 
 def _spark_counts(base, unit, metrics, wins, levels, a_start, a_end, spark):
     """Counts per seller x anchor day x window: n (total), f_<k> (flagged) for each flag metric,
-    all_n (every seller), and for each peer level ('p' = peer group, 'p2' = fallback group) the
-    same counts for the other sellers: <lvl>_n, <lvl>_m (other sellers), <lvl>_f_<k>.
+    all_n (every seller), and for each peer group level ('p0', 'p1', ...) the same counts for the
+    other sellers: <lvl>_n, <lvl>_m (other sellers), <lvl>_f_<k>.
     Counting by customers, the peer row leaves out every customer of this seller (disjoint rows)."""
     from pyspark.sql import functions as F
     flags = [m['name'] for m in metrics if m['kind'] == 'flag']
     W = spark.createDataFrame([(i, int(s), int(e)) for i, (s, e) in enumerate(wins)], 'w int, ws int, we int')
-    gk = ['_g', '_g2']
+    gk = [gc for _, gc in levels]
     if unit == 'customer':
         r0 = base.groupBy(*gk, '_m', '_c', '_d').agg(*[F.max('_f_' + k).alias('_f_' + k) for k in flags])
     else:
@@ -159,7 +209,7 @@ def _spark_counts(base, unit, metrics, wins, levels, a_start, a_end, spark):
         M = x.groupBy(*key).agg(F.sum('_n').alias('n'), *[F.sum('_f_' + k).alias('f_' + k) for k in flags])
         tot = M.groupBy('_t', 'w').agg(F.sum('n').alias('all_n'))
     out = M.join(tot, ['_t', 'w'])
-    for lvl, gc in levels:                                  # e.g. [('p', '_g'), ('p2', '_g2')]
+    for lvl, gc in levels:                                  # e.g. [('p0', '_g0'), ('p1', '_g1')]
         nm = M.groupBy(gc, '_t', 'w').agg(F.countDistinct('_m').alias('_gm'))
         if unit == 'customer':
             C = A.groupBy(gc, '_c', '_t', 'w').agg(*[F.max('_f_' + k).alias('_cf_' + k) for k in flags])
@@ -185,15 +235,16 @@ def _spark_counts(base, unit, metrics, wins, levels, a_start, a_end, spark):
 
 def _spark_tests(counts, unit, metrics, comparisons, wins, levels, cfg, spark):
     """One row per seller x anchor x metric x comparison x test with the 2x2 table a, b, c, d.
-    One join for all comparisons, then one explode over metrics x tests (no unions)."""
+    Tests: 'self', and 'peer:<cols>' for each peer group. One join for all comparisons, then one
+    explode over metrics x tests (no unions)."""
     from pyspark.sql import functions as F
     flags = [m['name'] for m in metrics if m['kind'] == 'flag']
-    lv = [l for l, _ in levels]
+    lv = [(l, gc, lab) for (l, gc), lab in zip(levels, cfg['_peer_labels'])]
     cols = ['n', 'all_n'] + ['f_' + k for k in flags] + \
-        [l + c for l in lv for c in ['_n', '_m'] + ['_f_' + k for k in flags]]
+        [l + c for l, _, _ in lv for c in ['_n', '_m'] + ['_f_' + k for k in flags]]
     cmp_df = spark.createDataFrame([(c['name'], wins.index(tuple(c['recent'])), wins.index(tuple(c['base'])))
                                     for c in comparisons], 'comparison string, wr int, wb int')
-    gk = ['_g', '_g2']
+    gk = [gc for _, gc, _ in lv]
     R = counts.join(F.broadcast(cmp_df), counts['w'] == cmp_df['wr']).select(
         *gk, '_m', '_t', 'comparison', 'wb', *[F.col(c).alias('r_' + c) for c in cols])
     B = counts.select(*gk, '_m', '_t', F.col('w').alias('wb'), *[F.col(c).alias('b_' + c) for c in cols])
@@ -201,42 +252,34 @@ def _spark_tests(counts, unit, metrics, comparisons, wins, levels, cfg, spark):
     J = R.join(B, gk + ['_m', '_t', 'wb'], 'left').join(Ball, ['_t', 'wb'], 'left')
     z = lambda c: F.coalesce(F.col(c), F.lit(0)).cast('long')
     nr, nb = z('r_n'), z('b_n')
-    none = F.lit(None).cast('long')
-    if lv:
-        # peer group, or the fallback group when the peer group has fewer than min_peers other sellers
-        fine = (z('r_p_m') >= cfg['min_peers']) if len(lv) == 2 else F.lit(True)
-        pick = lambda pre, c: F.when(fine, z(pre + 'p_' + c)).otherwise(z(pre + lv[-1] + '_' + c))
-        level = F.when(fine, F.lit('group')).otherwise(F.lit('fallback'))
-        group = F.when(fine, F.col('_g')).otherwise(F.col('_g2'))
-    else:
-        level = group = F.lit(None).cast('string')
-    items = []
+    none, nostr = F.lit(None).cast('long'), F.lit(None).cast('string')
+    items = []           # (metric, test, a, b, c, d, flagged, other sellers, peer level or None)
     for m in metrics:
         k = m['name']
         if m['kind'] == 'flag':
             fr, fb = z('r_f_' + k), z('b_f_' + k)
-            items.append((k, 'self', fr, nr - fr, fb, nb - fb, fr, none))
-            if lv:
-                pf, pn = pick('r_', 'f_' + k), pick('r_', 'n')
-                items.append((k, 'peer', fr, nr - fr, pf, pn - pf, fr, pick('r_', 'm')))
-        else:  # volume: seller vs everyone else (self) or vs its peers (peer), recent vs base
-            items.append((k, 'self', nr, z('r_all_n') - nr, nb, z('ball') - nb, nr, none))
-            if lv:
-                items.append((k, 'peer', nr, pick('r_', 'n'), nb, pick('b_', 'n'), nr, pick('r_', 'm')))
+            items.append((k, 'self', fr, nr - fr, fb, nb - fb, fr, none, None))
+            for l, gc, lab in lv:
+                pf, pn = z('r_' + l + '_f_' + k), z('r_' + l + '_n')
+                items.append((k, 'peer:' + lab, fr, nr - fr, pf, pn - pf, fr, z('r_' + l + '_m'), (l, gc)))
+        elif m['kind'] == 'volume':   # seller vs everyone else (self) or vs its peers, recent vs base
+            items.append((k, 'self', nr, z('r_all_n') - nr, nb, z('ball') - nb, nr, none, None))
+            for l, gc, lab in lv:
+                items.append((k, 'peer:' + lab, nr, z('r_' + l + '_n'), nb, z('b_' + l + '_n'), nr,
+                              z('r_' + l + '_m'), (l, gc)))
     structs = []
-    for k, test, a, b, c, d, flagged, pm in items:
+    for k, test, a, b, c, d, flagged, pm, lvl in items:
         gate = (nr >= cfg['min_total']) & (flagged >= cfg['min_flag'])
-        if test == 'peer':
-            gate = gate & (pm >= cfg['min_peers']) & (pick('r_', 'n') >= cfg['min_total'])
+        if lvl:
+            gate = gate & (pm >= cfg['min_peers']) & (z('r_' + lvl[0] + '_n') >= cfg['min_total'])
         structs.append(F.when(gate, F.struct(F.lit(k).alias('metric'), F.lit(test).alias('test'),
                                              a.alias('a'), b.alias('b'), c.alias('c'), d.alias('d'),
-                                             (pm if test == 'peer' else none).alias('peer_sellers'),
-                                             (level if test == 'peer' else F.lit(None).cast('string')).alias('peer_level'),
-                                             (group if test == 'peer' else F.lit(None).cast('string')).alias('peer_group'))))
+                                             pm.alias('peer_sellers'),
+                                             (F.col(lvl[1]) if lvl else nostr).alias('peer_group'))))
     x = J.select(F.col('_t').alias('anchor'), F.col('_m').alias('merchant'),
                  'comparison', F.explode(F.array(*structs)).alias('s')).where(F.col('s').isNotNull())
     return x.select('anchor', 'merchant', 's.peer_group', 's.metric', 'comparison', F.lit(unit).alias('unit'),
-                    's.test', 's.a', 's.b', 's.c', 's.d', 's.peer_sellers', 's.peer_level')
+                    's.test', 's.a', 's.b', 's.c', 's.d', 's.peer_sellers')
 
 
 # ---------------------------------------------------------------------------- pandas steps
@@ -354,6 +397,52 @@ def _intervals(det, comparisons):
     return rules, iv
 
 
+def _money_tests(daily, metric, comparisons, cfg, start, a_s, a_e):
+    """Money surge: one-sided Mann-Whitney on the seller's DAILY total amount, recent days vs base
+    days (days without sales count as 0). Self only; comparisons with a recent window under 3 days
+    are skipped. Returns candidate rows (U above its mean) and the family sizes per anchor."""
+    sellers = np.array(sorted(daily['merchant'].unique()))
+    n_days = (a_e - start).days + 1
+    si = pd.Index(sellers).get_indexer(daily['merchant'])
+    di = (daily['day'] - start).dt.days.values
+    ok_ = (di >= 0) & (di < n_days)
+    A = np.zeros((len(sellers), n_days)); N = np.zeros((len(sellers), n_days))
+    np.add.at(A, (si[ok_], di[ok_]), daily['amt'].values[ok_].astype(float))
+    np.add.at(N, (si[ok_], di[ok_]), daily['n'].values[ok_].astype(float))
+    rows, fam = [], []
+    for c in comparisons:
+        (rs, re_), (bs, be) = c['recent'], c['base']
+        if re_ - rs + 1 < 3:
+            continue
+        for t in pd.date_range(a_s, a_e):
+            i = (t - start).days
+            r0, r1, b0, b1 = i - re_ + 1, i - rs + 1, i - be + 1, i - bs + 1
+            if b0 < 0:
+                continue
+            gate = N[:, r0:r1 + 1].sum(axis=1) >= cfg['min_total']
+            fam.append((t, metric, c['name'], int(gate.sum())))
+            if not gate.any():
+                continue
+            X, Y = A[gate, r0:r1 + 1], A[gate, b0:b1 + 1]
+            U, p = mannwhitney_greater(X, Y)
+            up = U > X.shape[1] * Y.shape[1] / 2.0
+            if not up.any():
+                continue
+            X, Y, U, p = X[up], Y[up], U[up], p[up]
+            rows.append(pd.DataFrame({
+                'anchor': t, 'merchant': sellers[gate][up], 'peer_group': None, 'metric': metric,
+                'comparison': c['name'], 'unit': 'amount', 'test': 'self',
+                'a': np.round(X.sum(axis=1)).astype(np.int64), 'b': np.round(Y.sum(axis=1)).astype(np.int64),
+                'c': X.shape[1], 'd': Y.shape[1], 'peer_sellers': np.nan,
+                'share_recent': X.mean(axis=1), 'share_ref': Y.mean(axis=1), 'p': p}))
+    det = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(
+        columns=['anchor', 'merchant', 'peer_group', 'metric', 'comparison', 'unit', 'test', 'a', 'b', 'c', 'd',
+                 'peer_sellers', 'share_recent', 'share_ref', 'p'])
+    fam = pd.DataFrame(fam, columns=['anchor', 'metric', 'comparison', 'n_tests'])
+    fam['unit'], fam['test'] = 'amount', 'self'
+    return det, fam[fam['n_tests'] > 0]
+
+
 # ---------------------------------------------------------------------------- main
 def run_fisher_backtest(df, config, spark=None):
     """Rolling backtest of Fisher-test triggers. Every day in the anchor range plays 'today'.
@@ -365,12 +454,29 @@ def run_fisher_backtest(df, config, spark=None):
     from pyspark.sql import functions as F
     cfg = dict(DEFAULTS); cfg.update(config or {})
     spark = spark or df.sparkSession
-    metrics, comparisons = cfg['metrics'], cfg['comparisons']
-    peer = bool(cfg['peer_cols'])
-    fb = list(cfg['peer_fallback_cols'] or [])
-    levels = ([('p', '_g')] + ([('p2', '_g2')] if fb else [])) if peer else []
+    comparisons = cfg['comparisons']
+    if cfg.get('peer_cols') and not cfg['peer_groups']:          # older settings: one combined group
+        cfg['peer_groups'] = [list(cfg['peer_cols'])]
+    groups = [list(g) for g in cfg['peer_groups'] if g]
+    levels = [('p%d' % i, '_g%d' % i) for i in range(len(groups))]
+    cfg['_peer_labels'] = ['+'.join(g) for g in groups]
+    user_metrics = cfg['metrics']
+    # relative amount: one flag per peer group (or one over all sellers when there are no peer groups)
+    metrics, rel = [], []
+    for m in user_metrics:
+        if m['kind'] == 'rel_amount':
+            for gi, g in enumerate(groups or [[]]):
+                name = m['name'] + '_' + ('_'.join(g) if g else 'all')
+                metrics.append({'name': name, 'kind': 'flag', 'rel': (gi if g else None, float(m.get('level', 0.9)))})
+                rel.append(name)
+        elif m['kind'] in ('flag', 'volume'):
+            metrics.append(m)
+    money = [m['name'] for m in user_metrics if m['kind'] == 'money']
+    kinds = {m['name']: ('amount' if m['kind'] == 'money' else 'volume' if m['kind'] == 'volume' else 'flag')
+             for m in metrics + [m for m in user_metrics if m['kind'] == 'money']}
     units = list(cfg['units'])
-    steps = ['check_inputs', 'anchor_range'] + ['spark_tests_' + u for u in units] + \
+    steps = ['check_inputs', 'anchor_range'] + (['amount_thresholds'] if rel else []) + \
+            ['spark_tests_' + u for u in units] + (['money_tests'] if money else []) + \
             ['fisher_and_q', 'alerts', 'spark_labels', 'spark_outcomes', 'summary']
     res = {'ok': False, 'detail': None, 'summary': None, 'outcomes': None, 'failed': []}
     st = {}
@@ -384,22 +490,31 @@ def run_fisher_backtest(df, config, spark=None):
         return out
 
     def check():
-        need = [cfg['date_col'], cfg['merchant_col'], cfg['customer_col']] + list(cfg['peer_cols']) + fb
-        miss = [c for c in need if c not in df.columns]
+        if cfg.get('peer_fallback_cols'):
+            raise ValueError('peer_fallback_cols was replaced by peer_groups: list each group to test')
+        need = [cfg['date_col'], cfg['merchant_col'], cfg['customer_col']] + [c for g in groups for c in g]
+        if rel or money:
+            if not cfg['amount_col']:
+                raise ValueError('relative amount and money surge metrics need amount_col')
+            need.append(cfg['amount_col'])
+        miss = [c for c in dict.fromkeys(need) if c not in df.columns]
         if miss:
             raise ValueError(f"columns not in df: {', '.join(miss)}")
-        if fb and not peer:
-            raise ValueError('peer_fallback_cols needs peer_cols')
         if cfg['bh_scope'] not in ('rule', 'day'):
             raise ValueError("bh_scope must be 'rule' or 'day'")
-        names = [m['name'] for m in metrics]
+        names = [m['name'] for m in user_metrics] + rel
         if len(set(names)) != len(names):
-            raise ValueError('metric names must be unique')
+            raise ValueError('metric names must be unique (relative amount adds <name>_<group> metrics)')
+        for m in user_metrics:
+            if m['kind'] not in ('flag', 'volume', 'rel_amount', 'money'):
+                raise ValueError(f"metric {m['name']}: unknown kind {m['kind']}")
+            if m['kind'] == 'rel_amount' and not (0 < float(m.get('level', 0.9)) < 1):
+                raise ValueError(f"metric {m['name']}: level must be between 0 and 1, e.g. 0.9")
         for cmp_ in comparisons:
             (s1, e1), (s2, e2) = cmp_['recent'], cmp_['base']
             if not (1 <= s1 <= e1 and 1 <= s2 <= e2):
                 raise ValueError(f"comparison {cmp_['name']}: windows need 1 <= start <= end")
-        exprs = [m['expr'] for m in metrics if m['kind'] == 'flag']
+        exprs = [m['expr'] for m in metrics if m['kind'] == 'flag' and 'rel' not in m]
         if cfg['susp_cond']:
             exprs.append(cfg['susp_cond'])
         for c in [cfg['susp_date_col'], cfg['def_col'], cfg['obs_col']]:
@@ -407,17 +522,37 @@ def run_fisher_backtest(df, config, spark=None):
                 raise ValueError(f"column not in df: {c}")
         for e in exprs:
             df.limit(0).select(F.expr(e)).schema   # raises if the SQL condition does not parse
-        grp = lambda cs: F.concat_ws(' | ', *[F.coalesce(F.col(c).cast('string'), F.lit('(null)')) for c in cs]) \
+
+    def grp(cs):
+        return F.concat_ws(' | ', *[F.coalesce(F.col(c).cast('string'), F.lit('(null)')) for c in cs]) \
             if cs else F.lit('all')
-        g, g2 = grp(cfg['peer_cols'] if peer else []), grp(fb)
-        st['base'] = df.select(
-            F.to_date(F.col(cfg['date_col'])).alias('_d'), F.col(cfg['merchant_col']).cast('string').alias('_m'),
-            F.col(cfg['customer_col']).cast('string').alias('_c'), g.alias('_g'), g2.alias('_g2'),
-            *[F.when(F.expr(m['expr']), 1).otherwise(0).alias('_f_' + m['name']) for m in metrics if m['kind'] == 'flag']
-        ).where(F.col('_d').isNotNull() & F.col('_m').isNotNull())
+
+    def build_base(thr=None):
+        """One row per transaction: date, seller, customer, peer group keys and 0/1 flags."""
+        x = df.select(F.to_date(F.col(cfg['date_col'])).alias('_d'),
+                      F.col(cfg['merchant_col']).cast('string').alias('_m'),
+                      F.col(cfg['customer_col']).cast('string').alias('_c'),
+                      *[grp(g).alias('_g%d' % i) for i, g in enumerate(groups)],
+                      *([F.col(cfg['amount_col']).cast('double').alias('_amt')] if rel else []),
+                      *[F.when(F.expr(m['expr']), 1).otherwise(0).alias('_f_' + m['name'])
+                        for m in metrics if m['kind'] == 'flag' and 'rel' not in m]
+                      ).where(F.col('_d').isNotNull() & F.col('_m').isNotNull())
+        for m in metrics:
+            if 'rel' in m:
+                gi, _ = m['rel']
+                key = '_g%d' % gi if gi is not None else None
+                T = thr[m['name']]
+                if key:
+                    x = x.join(F.broadcast(T.withColumnRenamed('_key', key)), key, 'left')
+                else:
+                    x = x.crossJoin(F.broadcast(T.drop('_key')))
+                x = x.withColumn('_f_' + m['name'], F.when(F.col('_amt') > F.col('_thr'), 1).otherwise(0)).drop('_thr')
+        st['base'] = x.drop('_amt') if rel else x
 
     def anchors():
-        r = st['base'].agg(F.min('_d').alias('lo'), F.max('_d').alias('hi')).collect()[0]
+        d = F.to_date(F.col(cfg['date_col']))
+        r = df.where(d.isNotNull() & F.col(cfg['merchant_col']).isNotNull()).agg(
+            F.min(d).alias('lo'), F.max(d).alias('hi')).collect()[0]
         if r['lo'] is None:
             raise ValueError('df has no rows with a date and a seller')
         lo, hi = pd.Timestamp(r['lo']), pd.Timestamp(r['hi'])
@@ -431,7 +566,33 @@ def run_fisher_backtest(df, config, spark=None):
                              f"{max_back} days, so anchors would start {a_s.date()}")
         st['a_s'], st['a_e'], st['max_back'] = a_s, a_e, max_back
         st['n_days'] = (a_e - a_s).days + 1
+        st['lo'] = lo
         _log(f"      data {lo.date()} to {hi.date()}; anchors {a_s.date()} to {a_e.date()} ({st['n_days']} days)")
+        if not rel:
+            build_base()
+
+    def thresholds():
+        """Relative amount: the amount percentile per peer group value, from data BEFORE the first anchor
+        day only (no look-ahead). A transaction is flagged when its amount is above it."""
+        d = F.to_date(F.col(cfg['date_col']))
+        train = df.where(d.isNotNull() & (d < F.lit(str(st['a_s'].date())).cast('date')))
+        if not train.limit(1).count():
+            raise ValueError('relative amount needs data before the first anchor day: set anchor_start later')
+        amt = F.col(cfg['amount_col']).cast('double')
+        thr = {}
+        for m in metrics:
+            if 'rel' in m:
+                gi, level = m['rel']
+                if gi is None:
+                    T = train.agg(F.expr(f'percentile_approx({cfg["amount_col"]}, {level}, 10000)').cast('double').alias('_thr'))
+                    T = T.withColumn('_key', F.lit('all'))
+                else:
+                    T = train.select(grp(groups[gi]).alias('_key'), amt.alias('_a')).groupBy('_key').agg(
+                        F.expr(f'percentile_approx(_a, {level}, 10000)').alias('_thr'))
+                thr[m['name']] = T.persist()
+                _log(f"      {m['name']}: {T.count():,} group thresholds (p{level * 100:g})")
+        st['thr'] = thr
+        build_base(thr)
 
     def tests_for(unit):
         def run():
@@ -454,22 +615,52 @@ def run_fisher_backtest(df, config, spark=None):
             _log(f"      {int(fam['n_tests'].sum()):,} tests, {n:,} leaning up (kept)")
         return run
 
+    def money_step():
+        d = F.to_date(F.col(cfg['date_col']))
+        start = st['a_s'] - pd.Timedelta(days=st['max_back'] - 1)
+        daily = (df.where(d.between(str(start.date()), str(st['a_e'].date())) & F.col(cfg['merchant_col']).isNotNull())
+                 .groupBy(F.col(cfg['merchant_col']).cast('string').alias('merchant'), d.alias('day'))
+                 .agg(F.sum(F.col(cfg['amount_col']).cast('double')).alias('amt'), F.count(F.lit(1)).alias('n'))
+                 .toPandas())
+        daily['day'] = pd.to_datetime(daily['day']); daily['amt'] = daily['amt'].fillna(0.0)
+        for name in money:
+            det_m, fam_m = _money_tests(daily, name, comparisons, cfg, start, st['a_s'], st['a_e'])
+            st.setdefault('det', []).append(det_m); st.setdefault('fam', []).append(fam_m)
+            _log(f"      {name}: {int(fam_m['n_tests'].sum()):,} tests, {len(det_m):,} leaning up (kept)")
+
     def fisher():
         det = pd.concat(st['det'], ignore_index=True)
         fam = pd.concat(st['fam'], ignore_index=True)
         det['anchor'] = pd.to_datetime(det['anchor']); fam['anchor'] = pd.to_datetime(fam['anchor'])
         for c in 'abcd':
             det[c] = det[c].astype(np.int64)
-        det['share_recent'] = det['a'] / (det['a'] + det['b']).where(lambda s: s > 0)
-        det['share_ref'] = det['c'] / (det['c'] + det['d']).where(lambda s: s > 0)
-        det['odds_ratio'], det['or_lo'], det['or_hi'] = odds_ratio(det['a'], det['b'], det['c'], det['d'])
-        det['p'] = fisher_greater(det['a'], det['b'], det['c'], det['d'])
+        for c in ['share_recent', 'share_ref', 'p']:
+            if c not in det.columns:
+                det[c] = np.nan
+        fi = (det['unit'] != 'amount').values                     # Fisher rows; 'amount' = money surge rows
+        A_, B_, C_, D_ = (det.loc[fi, c].values for c in 'abcd')
+        det.loc[fi, 'share_recent'] = A_ / np.where(A_ + B_ > 0, A_ + B_, np.nan)
+        det.loc[fi, 'share_ref'] = C_ / np.where(C_ + D_ > 0, C_ + D_, np.nan)
+        det['odds_ratio'] = det['or_lo'] = det['or_hi'] = np.nan
+        if fi.any():
+            o, lo_, hi_ = odds_ratio(A_, B_, C_, D_)
+            det.loc[fi, 'odds_ratio'], det.loc[fi, 'or_lo'], det.loc[fi, 'or_hi'] = o, lo_, hi_
+            det.loc[fi, 'p'] = fisher_greater(A_, B_, C_, D_)
+        det['p'] = det['p'].astype(float)
+        # the exact days behind a, b (recent) and c, d (ref), to filter df back to the same rows
+        rec = {c['name']: c['recent'] for c in comparisons}; bas = {c['name']: c['base'] for c in comparisons}
+        day = lambda col, back: det['anchor'] - pd.to_timedelta(det['comparison'].map(
+            lambda c: (rec if col == 'r' else bas)[c][back]) - 1, unit='D')
+        det['recent_start'], det['recent_end'] = day('r', 1), day('r', 0)
+        peer_flag = det['test'].str.startswith('peer') & (det['metric'].map(kinds) == 'flag')
+        det['ref_start'] = day('b', 1).where(~peer_flag, det['recent_start'])
+        det['ref_end'] = day('b', 0).where(~peer_flag, det['recent_end'])
         keys = ['anchor'] if cfg['bh_scope'] == 'day' else ['anchor', 'metric', 'comparison', 'unit', 'test']
         det = det.merge(fam.groupby(keys, as_index=False)['n_tests'].sum(), on=keys, how='left')
         det['q'] = np.nan
         for _, idx in det.groupby(keys).groups.items():
             det.loc[idx, 'q'] = bh_qvalues(det.loc[idx, 'p'].values, det.loc[idx[0], 'n_tests'])
-        det['fired'] = (det['q'] <= cfg['q_max']) & (det['odds_ratio'] >= cfg['or_min'])
+        det['fired'] = (det['q'] <= cfg['q_max']) & ((det['odds_ratio'] >= cfg['or_min']) | (det['unit'] == 'amount'))
         st['detail'], st['fam'] = det, fam
         _log(f"      {int(det['fired'].sum()):,} fired")
 
@@ -548,7 +739,7 @@ def run_fisher_backtest(df, config, spark=None):
         cnt = ['txn', 'client', 'susp_txn', 'susp_client', 'obs_txn', 'obs_client', 'def_txn', 'def_client']
         look = lambda tab, rid, basis: (tab[(tab['rid'] == rid) & (tab['basis'] == basis)].iloc[0]
                                         if len(tab) and ((tab['rid'] == rid) & (tab['basis'] == basis)).any() else None)
-        kind = {m['name']: m['kind'] for m in metrics}
+        kind = kinds
         rows = []
         for _, ru in rules.iterrows():
             for basis, other in [('fired', 'not_fired'), ('alert', 'not_alerted')]:
@@ -575,14 +766,16 @@ def run_fisher_backtest(df, config, spark=None):
         _log(f"      {len(iv):,} seller day ranges; outcomes for {len(rules)} rules")
 
     def summary():
-        st['summary'] = _summary(st['detail'], st['fam'], st['n_days'], comparisons, metrics, st['susp'], st['loans'],
+        st['summary'] = _summary(st['detail'], st['fam'], st['n_days'], comparisons,
+                                 [{'name': k, 'kind': v} for k, v in kinds.items()], st['susp'], st['loans'],
                                  st['a_s'], st['a_e'], int(cfg['lift_days']))
-        cols = ['anchor', 'merchant', 'peer_group', 'metric', 'comparison', 'unit', 'test', 'a', 'b', 'c', 'd',
-                'share_recent', 'share_ref', 'odds_ratio', 'or_lo', 'or_hi', 'p', 'q', 'n_tests', 'peer_sellers', 'peer_level',
-                'fired', 'alert']
+        cols = ['anchor', 'recent_start', 'recent_end', 'ref_start', 'ref_end', 'merchant', 'peer_group', 'metric',
+                'comparison', 'unit', 'test', 'a', 'b', 'c', 'd', 'share_recent', 'share_ref', 'odds_ratio', 'or_lo',
+                'or_hi', 'p', 'q', 'n_tests', 'peer_sellers', 'fired', 'alert']
         st['detail'] = st['detail'][cols].sort_values(['anchor', 'p']).reset_index(drop=True)
 
-    fns = [check, anchors] + [tests_for(u) for u in units] + [fisher, alerts, labels, outcomes, summary]
+    fns = [check, anchors] + ([thresholds] if rel else []) + [tests_for(u) for u in units] + \
+          ([money_step] if money else []) + [fisher, alerts, labels, outcomes, summary]
     for i, (name, fn) in enumerate(zip(steps, fns), 1):
         try:
             step(i, name, fn)

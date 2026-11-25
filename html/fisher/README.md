@@ -21,16 +21,36 @@ The file imports only pandas, numpy and PySpark. The Fisher test is written insi
 
 **Rolling backtest.** Every day from the first day where every window fits inside the data, up to the last day in `df`, plays "today" (the anchor). Windows count back from the anchor: day 1 is the anchor itself, so "7 vs 8–15" means the last 7 days against the 8 days before them. Each anchor uses only data up to that day.
 
-For every seller × anchor × **metric** × **comparison** × **count unit** × **test**, it builds a 2×2 table and runs a one-sided Fisher exact test (only increases count):
+For every seller × anchor × **metric** × **comparison** × **count unit** × **test**, it builds a 2×2 table and runs a one-sided Fisher exact test (only increases count). The **money surge** metric uses a rank test instead (see below).
 
 | Metric | Self test (recent vs base window) | Peer test (seller vs its peers, same recent window) |
 |---|---|---|
 | **Flag share** (any SQL condition, e.g. `utilization > 0.9`) | flagged / not flagged, recent vs base | seller flagged / not flagged vs peers flagged / not flagged |
 | **Amount flag** (e.g. `txn_amount >= 5000000`) | same as flag share | same as flag share |
+| **Amount range** (e.g. `txn_amount BETWEEN 9000000 AND 9999999`, many payments just under a limit) | same as flag share | same as flag share |
+| **Relative amount** (`rel_amount`, e.g. above the 90th percentile of the peer group's amounts) | same as flag share | same as flag share |
 | **Volume** | seller vs all other sellers, recent vs base | seller vs its peers, recent vs base |
+| **Money surge** (`money`) | daily total amount, recent days vs base days (Mann-Whitney) | none |
+
+**Amount: why not Fisher on money.** Fisher counts independent items, and money isn't made of independent pieces: one 50M payment is one event. Put amounts in a 2×2 table and the answer changes with the unit (đồng or millions). So amount is used in three valid ways:
+
+- **Amount flag / range:** each transaction is flagged or not, then counted.
+- **Relative amount:** a transaction is flagged when its amount is above the chosen percentile of its peer group's amounts. That's one metric per peer group, named `<name>_<group columns>` (e.g. `big_rel_seller_group`), or `<name>_all` with no peer groups. The percentiles use **only data before the first anchor day**, so the backtest never uses future amounts. It needs `amount_col`, and it adapts to each segment's normal ticket size.
+- **Money surge:** a one-sided Mann-Whitney rank test on the seller's **daily total amount**, recent days vs base days.
+  - Days without sales count as 0, so a new seller shows as a surge.
+  - Each day is one observation, so units don't matter and one huge payment can't dominate.
+  - The p-value is exact when there are no ties and at most 40 days in all; otherwise it uses the normal approximation with tie and continuity correction (as `scipy.stats.mannwhitneyu`).
+  - It's self only, and skipped for comparisons whose recent window is under 3 days (too few days to ever be significant).
+  - Gate: at least `min_total` transactions in the recent window.
+  - It fires on q alone (there's no odds ratio), and its rows have `unit = amount`, `rule_type = amount`.
 
 - **Count unit.** `customer` counts each person once per window (a customer is flagged if they had a flagged transaction there). `txn` counts transactions. Repeated transfers from one customer are not independent, so `customer` is the safer test. `txn` also catches a few customers paying many times. Run both and compare them in the summary.
-- **Peers** are the other sellers with the same values in the peer columns (e.g. `seller_group`, `h3_9`). The seller itself is always left out. Counting by customers, the seller's own customers are also left out of the peer row, so the two rows never share a person. A peer test runs only with at least `min_peers` other sellers. With **fallback group columns** (e.g. `seller_group` alone), a seller whose peer group is too small that day is compared with the coarser group instead; `detail.peer_level` says `group` or `fallback`, and `peer_sellers` how many other sellers were in it. Peer columns should describe the seller (one value per seller).
+- **Peers.** `peer_groups` lists any number of groups, each its own test. The default is `[['seller_group'], ['h3_9'], ['seller_group', 'h3_9']]`, which gives the tests `peer:seller_group`, `peer:h3_9` and `peer:seller_group+h3_9`, so you can see whether a seller stands out in its business type, its area, or both.
+  - Peers are the other sellers with the same values in that group's columns. The seller itself is always left out.
+  - Counting by customers, the seller's own customers are also left out of the peer row, so the two rows never share a person.
+  - A peer test runs only with at least `min_peers` other sellers. `peer_sellers` says how many there were, and `peer_group` holds the group's values.
+  - Peer columns should describe the seller (one value per seller).
+  - Older settings with `peer_cols` still run as one combined group. `peer_fallback_cols` was replaced by `peer_groups`.
 - **Gate.** A test runs only when the seller has at least `min_total` in the recent window and at least `min_flag` flagged (for volume, its own count). Peers also need `min_total`.
 - **Fires** when the Benjamini–Hochberg q-value is ≤ `q_max` **and** the odds ratio (0.5 added to every cell) is ≥ `or_min`. The odds ratio gate stops very large sellers firing on tiny changes that still give a tiny p.
 - **BH scope** (`bh_scope`). `rule` (default): over all sellers tested that day for that rule, so each rule keeps its own 5% false-discovery rate (right when you pick one rule to go live). `day`: over every rule and seller that day, so the rate holds across all rules together (right when several rules go live at once). Rows leaning down (a·d ≤ b·c) are not brought into pandas, but they still count in the family size. Their p-values are large, so q is exact wherever it matters and can only be slightly higher elsewhere, never lower (tested against BH over every row).
@@ -42,7 +62,19 @@ Recent and base windows of the same seller share customers, so the self test is 
 
 ## Output
 
-`detail` (pandas) has one row per tested seller × day × rule that leans upward: `anchor, merchant, peer_group, metric, comparison, unit, test, a, b, c, d, share_recent, share_ref, odds_ratio, or_lo, or_hi, p, q, n_tests` (the BH family size), `peer_sellers, peer_level, fired, alert`.
+`detail` (pandas) has one row per tested seller × day × rule that leans upward:
+
+`anchor, recent_start, recent_end, ref_start, ref_end, merchant, peer_group, metric, comparison, unit, test, a, b, c, d, share_recent, share_ref, odds_ratio, or_lo, or_hi, p, q, n_tests` (the BH family size), `peer_sellers, fired, alert`.
+
+- **Mapping back to `df`.** `recent_start` and `recent_end` are the days behind `a` and `b`; `ref_start` and `ref_end` are the days behind `c` and `d`.
+  - For self and volume tests, the ref window is the base window.
+  - For flag peer tests it equals the recent window (the peers over the same days).
+  - Filter `df` on `merchant` and these dates to see the same transactions. For peer rows, also filter on the peer group's columns.
+- **Money surge rows:**
+  - `a` / `b`: total amount in the recent / base days;
+  - `c` / `d`: number of recent / base days;
+  - `share_recent` / `share_ref`: daily averages;
+  - `odds_ratio` is empty.
 
 `summary` (pandas) has one row per rule (metric × comparison × unit × test):
 

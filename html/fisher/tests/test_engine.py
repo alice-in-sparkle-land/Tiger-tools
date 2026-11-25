@@ -58,7 +58,7 @@ except ImportError:
 def fake(seed=7, days=110):
     rng = np.random.default_rng(seed)
     start = pd.Timestamp('2026-06-01')
-    groups = [('fashion', '89a1'), ('fashion', '89a2'), ('travel', '89b1')]
+    groups = [('fashion', '89a1'), ('fashion', '89a2'), ('travel', '89a1')]   # h3 89a1 spans two groups
     merch = {f'M{i:02d}': groups[i % 3] for i in range(18)}
     rows = []
     for m, (sg, h3) in merch.items():
@@ -71,8 +71,8 @@ def fake(seed=7, days=110):
                 cust = f'C{rng.integers(0, 600 if m != "M04" else 900):04d}'
                 p_hi = 0.55 if (m == 'M07' and late) else 0.12          # M07: high-utilisation share jump
                 util = rng.uniform(0.9, 1.0) if rng.random() < p_hi else rng.uniform(0, 0.9)
-                amt = float(rng.integers(1, 30)) * 1e5
-                bad = m in ('M04', 'M07') and late
+                amt = float(rng.integers(1, 30)) * 1e5 * (4 if (m == 'M10' and late) else 1)   # M10: amount surge
+                bad = m in ('M04', 'M07', 'M10') and late
                 rows.append(dict(txn_date=day + pd.Timedelta(hours=int(rng.integers(0, 23))), merchant_id=m,
                                  client_id=cust, seller_group=sg, h3_9=h3, utilization=util, txn_amount=amt,
                                  f_susp=int(bad and rng.random() < 0.3), f_pd30=int(rng.random() < (0.25 if bad else 0.05)),
@@ -85,27 +85,51 @@ CONFIG = {
     'metrics': [
         {'name': 'high_util', 'kind': 'flag', 'expr': 'utilization > 0.9'},
         {'name': 'big_ticket', 'kind': 'flag', 'expr': 'txn_amount >= 2500000'},
+        {'name': 'big_rel', 'kind': 'rel_amount', 'level': 0.9},
         {'name': 'volume', 'kind': 'volume'},
+        {'name': 'money_surge', 'kind': 'money'},
     ],
     'comparisons': [
         {'name': '1 vs 2-8', 'recent': [1, 1], 'base': [2, 8]},
         {'name': '7 vs 8-15', 'recent': [1, 7], 'base': [8, 15]},
         {'name': '30 vs 31-60', 'recent': [1, 30], 'base': [31, 60]},
     ],
-    'units': ['customer', 'txn'], 'peer_cols': ['seller_group', 'h3_9'], 'min_peers': 3,
+    'units': ['customer', 'txn'], 'peer_groups': [['seller_group'], ['h3_9'], ['seller_group', 'h3_9']],
+    'min_peers': 3, 'amount_col': 'txn_amount',
     'min_total': 10, 'min_flag': 5, 'q_max': 0.05, 'or_min': 2.0, 'cooldown': 7,
     'susp_cond': 'f_susp = 1', 'def_col': 'f_pd30', 'obs_col': 'f_pd30_obs',
 }
 
 
-def brute(pdf, cfg, a_s, a_e):
-    """Every 2x2 table the engine should build, the slow obvious way."""
+def add_flags(pdf, cfg, a_s):
+    """0/1 flag columns f_<name>, relative amount flags from data before a_s (Spark percentile_approx
+    returns the value at rank ceil(p * n) of the sorted amounts)."""
     pdf = pdf.copy()
     pdf['d'] = pdf['txn_date'].dt.normalize()
-    pdf['g'] = pdf[cfg['peer_cols']].astype(str).agg(' | '.join, axis=1)
-    flags = [m for m in cfg['metrics'] if m['kind'] == 'flag']
     pdf['f_high_util'] = (pdf['utilization'] > 0.9).astype(int)
     pdf['f_big_ticket'] = (pdf['txn_amount'] >= 2500000).astype(int)
+    flags = ['high_util', 'big_ticket']
+    groups = cfg.get('peer_groups') or []
+    for m in cfg['metrics']:
+        if m['kind'] != 'rel_amount':
+            continue
+        train = pdf[pdf['d'] < a_s]
+        for g in (groups or [[]]):
+            name = m['name'] + '_' + ('_'.join(g) if g else 'all')
+            key = pdf[g].astype(str).agg(' | '.join, axis=1) if g else pd.Series('all', index=pdf.index)
+            tkey = key[train.index]
+            thr = {k: np.sort(v.values)[int(np.ceil(m['level'] * len(v))) - 1] for k, v in train['txn_amount'].groupby(tkey)}
+            pdf['f_' + name] = (pdf['txn_amount'] > key.map(thr).astype(float)).fillna(False).astype(int)
+            flags.append(name)
+    return pdf, flags
+
+
+def brute(pdf, cfg, a_s, a_e):
+    """Every 2x2 table the engine should build, the slow obvious way."""
+    pdf, flag_names = add_flags(pdf, cfg, a_s)
+    groups = cfg.get('peer_groups') or []
+    for i, g in enumerate(groups):
+        pdf['g%d' % i] = pdf[g].astype(str).agg(' | '.join, axis=1)
     out = []
     for t in pd.date_range(a_s, a_e):
         def win(w):
@@ -115,43 +139,83 @@ def brute(pdf, cfg, a_s, a_e):
             def counts(sub):
                 res = {}
                 for m, gm in sub.groupby('merchant_id'):
-                    g = gm['g'].iloc[0]
-                    cell = sub[sub['g'] == g]
                     if unit == 'customer':
                         n = gm['client_id'].nunique()
-                        f = {k['name']: gm.loc[gm['f_' + k['name']] == 1, 'client_id'].nunique() for k in flags}
-                        others = cell[~cell['client_id'].isin(gm['client_id'])]
-                        pn = others['client_id'].nunique()
-                        pf = {k['name']: others.loc[others['f_' + k['name']] == 1, 'client_id'].nunique() for k in flags}
+                        f = {k: gm.loc[gm['f_' + k] == 1, 'client_id'].nunique() for k in flag_names}
                         alln = sub['client_id'].nunique()
                     else:
-                        n = len(gm); f = {k['name']: int(gm['f_' + k['name']].sum()) for k in flags}
-                        others = cell[cell['merchant_id'] != m]
-                        pn = len(others); pf = {k['name']: int(others['f_' + k['name']].sum()) for k in flags}
+                        n = len(gm); f = {k: int(gm['f_' + k].sum()) for k in flag_names}
                         alln = len(sub)
-                    res[m] = dict(g=g, n=n, f=f, pn=pn, pf=pf, pm=cell['merchant_id'].nunique() - 1, all=alln)
+                    peers = []
+                    for i in range(len(groups)):
+                        cell = sub[sub['g%d' % i] == gm['g%d' % i].iloc[0]]
+                        if unit == 'customer':
+                            others = cell[~cell['client_id'].isin(gm['client_id'])]
+                            pn = others['client_id'].nunique()
+                            pf = {k: others.loc[others['f_' + k] == 1, 'client_id'].nunique() for k in flag_names}
+                        else:
+                            others = cell[cell['merchant_id'] != m]
+                            pn = len(others); pf = {k: int(others['f_' + k].sum()) for k in flag_names}
+                        peers.append(dict(pn=pn, pf=pf, pm=cell['merchant_id'].nunique() - 1))
+                    res[m] = dict(n=n, f=f, all=alln, peers=peers)
                 return res
             for c in cfg['comparisons']:
                 R, B = counts(win(c['recent'])), counts(win(c['base']))
                 sb = win(c['base'])
                 ball = sb['client_id'].nunique() if unit == 'customer' else len(sb)
                 for m, r in R.items():
-                    b = B.get(m, dict(n=0, f={k['name']: 0 for k in flags}, pn=0, pf={k['name']: 0 for k in flags}))
-                    for mt in cfg['metrics']:
-                        k = mt['name']
-                        if mt['kind'] == 'flag':
-                            tests = [('self', r['f'][k], r['n'] - r['f'][k], b['f'][k], b['n'] - b['f'][k], r['f'][k]),
-                                     ('peer', r['f'][k], r['n'] - r['f'][k], r['pf'][k], r['pn'] - r['pf'][k], r['f'][k])]
+                    b = B.get(m, dict(n=0, f={k: 0 for k in flag_names},
+                                      peers=[dict(pn=0, pf={k: 0 for k in flag_names}, pm=0) for _ in groups]))
+                    names = [(k, 'flag') for k in flag_names] + [(mt['name'], 'volume') for mt in cfg['metrics'] if mt['kind'] == 'volume']
+                    for k, kind in names:
+                        if kind == 'flag':
+                            tests = [('self', r['f'][k], r['n'] - r['f'][k], b['f'][k], b['n'] - b['f'][k], r['f'][k], None)]
+                            tests += [('peer:' + '+'.join(g), r['f'][k], r['n'] - r['f'][k], p['pf'][k], p['pn'] - p['pf'][k], r['f'][k], p)
+                                      for g, p in zip(groups, r['peers'])]
                         else:
-                            tests = [('self', r['n'], r['all'] - r['n'], b['n'], ball - b['n'], r['n']),
-                                     ('peer', r['n'], r['pn'], b['n'], b['pn'], r['n'])]
-                        for test, a_, b_, c_, d_, fl in tests:
+                            tests = [('self', r['n'], r['all'] - r['n'], b['n'], ball - b['n'], r['n'], None)]
+                            tests += [('peer:' + '+'.join(g), r['n'], p['pn'], b['n'], bp['pn'], r['n'], p)
+                                      for g, p, bp in zip(groups, r['peers'], b['peers'])]
+                        for test, a_, b_, c_, d_, fl, p in tests:
                             gate = r['n'] >= cfg['min_total'] and fl >= cfg['min_flag']
-                            if test == 'peer':
-                                gate = gate and r['pm'] >= cfg['min_peers'] and r['pn'] >= cfg['min_total']
+                            if p is not None:
+                                gate = gate and p['pm'] >= cfg['min_peers'] and p['pn'] >= cfg['min_total']
                             if gate:
                                 out.append((t, m, k, c['name'], unit, test, a_, b_, c_, d_))
     return pd.DataFrame(out, columns=['anchor', 'merchant', 'metric', 'comparison', 'unit', 'test', 'a', 'b', 'c', 'd'])
+
+
+def brute_money(pdf, cfg, a_s, a_e):
+    """Money surge rows the slow way: scipy's Mann-Whitney on daily totals (no-sale days = 0)."""
+    from scipy.stats import mannwhitneyu
+    pdf = pdf.assign(d=pdf['txn_date'].dt.normalize())
+    max_back = max(max(c['recent'][1], c['base'][1]) for c in cfg['comparisons'])
+    days = pd.date_range(a_s - pd.Timedelta(days=max_back - 1), a_e)
+    amt = pdf.groupby(['merchant_id', 'd'])['txn_amount'].sum().unstack(fill_value=0).reindex(columns=days, fill_value=0)
+    cnt = pdf.groupby(['merchant_id', 'd']).size().unstack(fill_value=0).reindex(columns=days, fill_value=0)
+    out, fam = [], []
+    for c in cfg['comparisons']:
+        (rs, re_), (bs, be) = c['recent'], c['base']
+        if re_ - rs + 1 < 3:
+            continue
+        for t in pd.date_range(a_s, a_e):
+            rd = pd.date_range(t - pd.Timedelta(days=re_ - 1), t - pd.Timedelta(days=rs - 1))
+            bd = pd.date_range(t - pd.Timedelta(days=be - 1), t - pd.Timedelta(days=bs - 1))
+            n_t = 0
+            for m in amt.index:
+                if cnt.loc[m, rd].sum() < cfg['min_total']:
+                    continue
+                n_t += 1
+                x, y = amt.loc[m, rd].values.astype(float), amt.loc[m, bd].values.astype(float)
+                z = np.concatenate([x, y])
+                meth = 'exact' if (len(np.unique(z)) == len(z) and len(z) <= 40) else 'asymptotic'
+                r = mannwhitneyu(x, y, alternative='greater', method=meth)
+                if r.statistic > len(x) * len(y) / 2:
+                    out.append((t, m, c['name'], int(round(x.sum())), int(round(y.sum())), len(x), len(y), r.pvalue))
+            if n_t:
+                fam.append((t, c['name'], n_t))
+    return (pd.DataFrame(out, columns=['anchor', 'merchant', 'comparison', 'a', 'b', 'c', 'd', 'p']),
+            pd.DataFrame(fam, columns=['anchor', 'comparison', 'n_tests']))
 
 
 # ---------------------------------------------------------------------------- Part B
@@ -168,6 +232,7 @@ except Exception as e:  # noqa
 
 if spark is not None:
     from scipy.stats import fisher_exact
+    _min = min
     pdf = fake()
     df = spark.createDataFrame(pdf)
     cfg = dict(CONFIG, anchor_start='2026-08-01')
@@ -187,16 +252,59 @@ if spark is not None:
     ref = brute(pdf, CONFIG, a_s, a_e)
     keys = ['anchor', 'merchant', 'metric', 'comparison', 'unit', 'test']
     fam_ref = ref.groupby(['anchor', 'metric', 'comparison', 'unit', 'test']).size()
-    fam_eng = det.groupby(['anchor', 'metric', 'comparison', 'unit', 'test'])['n_tests'].first()
+    dfi = det[det['unit'] != 'amount']                       # Fisher rows (money surge rows checked below)
+    fam_eng = dfi.groupby(['anchor', 'metric', 'comparison', 'unit', 'test'])['n_tests'].first()
     j = fam_eng.to_frame('e').join(fam_ref.to_frame('r'), how='left')
     check('family sizes (gated tests per day x rule) match brute force', (j['e'] == j['r']).all(), j[j['e'] != j['r']].head())
     lean = ref[ref['a'] * ref['d'] > ref['b'] * ref['c']]
-    m = lean.merge(det, on=keys, how='outer', suffixes=('_r', '_e'), indicator=True)
+    m = lean.merge(dfi, on=keys, how='outer', suffixes=('_r', '_e'), indicator=True)
     check('same candidate rows as brute force', (m['_merge'] == 'both').all() and len(m) > 500,
           m['_merge'].value_counts().to_dict())
     both = m[m['_merge'] == 'both']
     same = all((both[c + '_r'] == both[c + '_e']).all() for c in 'abcd')
-    check(f'every 2x2 table identical ({len(both):,} rows, both units, self and peer)', same)
+    check(f'every 2x2 table identical ({len(both):,} rows, both units, self and 3 peer groups, relative amount)', same)
+    check('  ... tests: self and one per peer group', set(dfi['test']) == {'self', 'peer:seller_group', 'peer:h3_9', 'peer:seller_group+h3_9'})
+    check('  ... relative amount: one metric per peer group', {'big_rel_seller_group', 'big_rel_h3_9', 'big_rel_seller_group_h3_9'} <= set(dfi['metric']))
+    ph = dfi[dfi['test'] == 'peer:h3_9']
+    check('  ... peer:h3_9 rows carry the h3 value as peer_group', set(ph['peer_group']) <= {'89a1', '89a2'} and len(ph) > 0)
+
+    # money surge: Mann-Whitney on daily totals vs scipy, row by row
+    mdet = det[det['unit'] == 'amount']
+    mref, mfam = brute_money(pdf, CONFIG, a_s, a_e)
+    mm = mref.merge(mdet, on=['anchor', 'merchant', 'comparison'], how='outer', indicator=True, suffixes=('_r', '_e'))
+    check(f'money surge: same rows as scipy ({len(mref):,})', len(mref) > 50 and (mm['_merge'] == 'both').all(),
+          mm['_merge'].value_counts().to_dict())
+    bm = mm[mm['_merge'] == 'both']
+    check('  ... same totals and day counts', all((bm[c + '_r'] == bm[c + '_e']).all() for c in 'abcd'))
+    check('  ... p-values = scipy.stats.mannwhitneyu', np.allclose(bm['p_e'], bm['p_r'], rtol=1e-9, atol=1e-13))
+    fm = mdet.groupby(['anchor', 'comparison'])['n_tests'].first().to_frame('e').join(mfam.set_index(['anchor', 'comparison']))
+    check('  ... family sizes', (fm['e'] == fm['n_tests']).all())
+    check('  ... 1-day comparison skipped', '1 vs 2-8' not in set(mdet['comparison']))
+
+    # dates: filter the original rows with recent_start/end and ref_start/end and rebuild a, b, c, d
+    pdf_f, _ = add_flags(pdf, CONFIG, a_s)
+    smp = dfi[dfi['unit'] == 'txn'].sample(300, random_state=1)
+    okd = True
+    for _, row in smp.iterrows():
+        f = 'f_' + row['metric'] if row['metric'] != 'volume' else None
+        mine = pdf_f[pdf_f['merchant_id'] == row['merchant']]
+        rwin = mine[(mine['d'] >= row['recent_start']) & (mine['d'] <= row['recent_end'])]
+        if f is None:
+            okd &= row['a'] == len(rwin)
+        else:
+            okd &= (row['a'] == rwin[f].sum()) and (row['b'] == len(rwin) - rwin[f].sum())
+            if row['test'] == 'self':
+                bwin = mine[(mine['d'] >= row['ref_start']) & (mine['d'] <= row['ref_end'])]
+                okd &= (row['c'] == bwin[f].sum()) and (row['d'] == len(bwin) - bwin[f].sum())
+            else:
+                okd &= (row['ref_start'] == row['recent_start']) and (row['ref_end'] == row['recent_end'])
+    check('dates: recent/ref start and end filter df back to the same a, b, c, d (300 rows)', bool(okd))
+    smm = mdet.sample(_min(100, len(mdet)), random_state=1); okm = True
+    for _, row in smm.iterrows():
+        mine = pdf[pdf['merchant_id'] == row['merchant']].assign(d=lambda x: x['txn_date'].dt.normalize())
+        okm &= round(mine[(mine['d'] >= row['recent_start']) & (mine['d'] <= row['recent_end'])]['txn_amount'].sum()) == row['a']
+        okm &= round(mine[(mine['d'] >= row['ref_start']) & (mine['d'] <= row['ref_end'])]['txn_amount'].sum()) == row['b']
+    check('  ... and for money surge rows (totals)', bool(okm))
     pv = np.array([fisher_exact([[a, b], [c, d]], alternative='greater')[1]
                    for a, b, c, d in both[['a_e', 'b_e', 'c_e', 'd_e']].values])
     check('p-values = scipy', np.allclose(both['p'].values, pv, rtol=1e-6, atol=1e-12))
@@ -205,7 +313,7 @@ if spark is not None:
     from scipy.stats import false_discovery_control
     ref['q'] = ref.groupby(['anchor', 'metric', 'comparison', 'unit', 'test'])['p'].transform(
         lambda s: false_discovery_control(s.values))
-    mq = det.merge(ref[keys + ['q']], on=keys, suffixes=('', '_r'))
+    mq = dfi.merge(ref[keys + ['q']], on=keys, suffixes=('', '_r'))
     small = mq['q_r'] <= 0.5
     check('q-values = BH over the full family (where q <= 0.5)', np.allclose(mq.loc[small, 'q'], mq.loc[small, 'q_r'], rtol=1e-6, atol=1e-12))
     check('  ... and never below it elsewhere (rows leaning down are left out)', (mq['q'] >= mq['q_r'] * (1 - 1e-6) - 1e-12).all())
@@ -214,20 +322,24 @@ if spark is not None:
     al = det[det['alert']]
     check('planted M07 (high_util) alerts on high_util', ((al['merchant'] == 'M07') & (al['metric'] == 'high_util')).any())
     check('planted M04 (volume) alerts on volume', ((al['merchant'] == 'M04') & (al['metric'] == 'volume')).any())
-    planted = al['merchant'].isin(['M04', 'M07'])
-    rate_p, rate_n = planted.sum() / 2, (~planted).sum() / 16
+    check('planted M10 (amount surge) alerts on money_surge', ((al['merchant'] == 'M10') & (al['metric'] == 'money_surge')).any())
+    check('planted M10 alerts on relative amount', ((al['merchant'] == 'M10') & al['metric'].str.startswith('big_rel')).any())
+    planted = al['merchant'].isin(['M04', 'M07', 'M10'])
+    rate_p, rate_n = planted.sum() / 3, (~planted).sum() / 15
     check(f'planted sellers alert far more ({rate_p:.1f} vs {rate_n:.1f} alerts per seller)', rate_p >= 5 * rate_n)
     gaps = al.sort_values('anchor').groupby(['merchant', 'metric', 'comparison', 'unit', 'test'])['anchor'].diff().dt.days.dropna()
     check('cooldown: alerts of one rule on one seller are >= 7 days apart', (gaps >= 7).all())
     check('every alert is a fired row', det.loc[det['alert'], 'fired'].all())
-    fired = det[det['fired']]
+    fired = dfi[dfi['fired']]
     check('fired = q <= 0.05 and OR >= 2', ((fired['q'] <= 0.05) & (fired['odds_ratio'] >= 2)).all())
+    check('money surge fired = q <= 0.05', (mdet['fired'] == (mdet['q'] <= 0.05)).all())
     for c in ['rule_type', 'precision', 'recall', 'recall_early', 'median_lead_days', 'lift_after_alert',
               'def_rate_after_alert', 'def_rate_never_alerted', 'lift_in_window']:
         check(f'summary has {c}', c in summ.columns)
-    check('rule_type: volume rules marked volume, the rest flag',
+    check('rule_type: volume, amount (money surge), the rest flag',
           (summ.loc[summ['metric'] == 'volume', 'rule_type'] == 'volume').all() and
-          (summ.loc[summ['metric'] != 'volume', 'rule_type'] == 'flag').all())
+          (summ.loc[summ['metric'] == 'money_surge', 'rule_type'] == 'amount').all() and
+          (summ.loc[~summ['metric'].isin(['volume', 'money_surge']), 'rule_type'] == 'flag').all())
     best = summ[(summ['metric'] == 'high_util') & (summ['test'] == 'self') & (summ['comparison'] == '7 vs 8-15')]
     check('high_util 7 vs 8-15 has precision > 0 and lift after alert > 1',
           len(best) > 0 and (best['precision'] > 0).all() and (best['lift_after_alert'] > 1).all(), best.to_string())
@@ -262,7 +374,8 @@ if spark is not None:
                     client=len(cl), susp_client=int(cl['s'].sum()), obs_client=int(cl['o'].sum()), def_client=int(cl['x'].sum()))
     ok_all = True
     for rule in [dict(metric='high_util', comparison='7 vs 8-15', unit='customer', test='self'),
-                 dict(metric='volume', comparison='1 vs 2-8', unit='txn', test='peer')]:
+                 dict(metric='volume', comparison='1 vs 2-8', unit='txn', test='peer:seller_group+h3_9'),
+                 dict(metric='money_surge', comparison='7 vs 8-15', unit='amount', test='self')]:
         s_, e_ = rec[rule['comparison']]
         for basis, other in [('fired', 'not_fired'), ('alert', 'not_alerted')]:
             ev = det[(det[list(rule)] == pd.Series(rule)).all(axis=1) & det[basis]]
@@ -282,27 +395,12 @@ if spark is not None:
     hu = out[(out['metric'] == 'high_util') & (out['comparison'] == '7 vs 8-15') & (out['test'] == 'self') & (out['unit'] == 'customer')].set_index('group')
     check('  ... planted: suspicious rate by transaction higher when fired', hu.loc['fired', 'susp_rate_txn'] > 3 * hu.loc['not_fired', 'susp_rate_txn'])
 
-    # peer fallback: every h3 cell has 5 other sellers < min_peers 6, so all peer tests fall back to seller_group
-    cfg_fb = dict(CONFIG, anchor_start='2026-09-01', min_peers=6, peer_fallback_cols=['seller_group'],
-                  susp_cond=None, def_col=None, obs_col=None)
-    with contextlib.redirect_stdout(io.StringIO()):
-        r5 = run(df, cfg_fb, spark=spark)
-    check('fallback run ok', r5['ok'])
-    pe = r5['detail'][r5['detail']['test'] == 'peer']
-    check('  ... every peer test used the fallback group', len(pe) > 0 and (pe['peer_level'] == 'fallback').all())
-    check('  ... travel (5 other sellers in seller_group) has no peer test', not pe['peer_group'].str.contains('travel').any())
-    ref5 = brute(pdf, dict(CONFIG, peer_cols=['seller_group'], min_peers=6), pd.Timestamp('2026-09-01'), a_e)
-    ref5 = ref5[(ref5['test'] == 'peer') & (ref5['a'] * ref5['d'] > ref5['b'] * ref5['c'])]
-    m5 = ref5.merge(pe, on=keys, how='outer', indicator=True, suffixes=('_r', '_e'))
-    check('  ... peer tables = brute force on seller_group alone',
-          (m5['_merge'] == 'both').all() and all((m5[c + '_r'] == m5[c + '_e']).all() for c in 'abcd'),
-          m5['_merge'].value_counts().to_dict())
-
     # BH over every rule of the day
-    cfg_day = dict(CONFIG, anchor_start='2026-09-01', units=['txn'], bh_scope='day', susp_cond=None, def_col=None, obs_col=None)
+    plain = [m for m in CONFIG['metrics'] if m['kind'] in ('flag', 'volume')]
+    cfg_day = dict(CONFIG, metrics=plain, anchor_start='2026-09-01', units=['txn'], bh_scope='day', susp_cond=None, def_col=None, obs_col=None)
     with contextlib.redirect_stdout(io.StringIO()):
         r6 = run(df, cfg_day, spark=spark)
-    ref6 = ref[(ref['unit'] == 'txn') & (ref['anchor'] >= '2026-09-01')].copy()
+    ref6 = ref[(ref['unit'] == 'txn') & (ref['anchor'] >= '2026-09-01') & ref['metric'].isin([m['name'] for m in plain])].copy()
     ref6['q'] = ref6.groupby('anchor')['p'].transform(lambda s: false_discovery_control(s.values))
     m6 = r6['detail'].merge(ref6[keys + ['q']], on=keys, suffixes=('', '_r'))
     sm = m6['q_r'] <= 0.5
@@ -315,9 +413,11 @@ if spark is not None:
     # transactions only, no peers, no labels
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        r2 = run(df, dict(CONFIG, units=['txn'], peer_cols=[], susp_cond=None, def_col=None, obs_col=None), spark=spark)
+        r2 = run(df, dict(CONFIG, metrics=[m for m in CONFIG['metrics'] if m['kind'] != 'money'], units=['txn'],
+                          peer_groups=[], susp_cond=None, def_col=None, obs_col=None), spark=spark)
     check('txn only, no peers, no labels: ok', r2['ok'], buf.getvalue()[-500:])
     check('  ... only txn/self rows', set(r2['detail']['unit']) == {'txn'} and set(r2['detail']['test']) == {'self'})
+    check('  ... relative amount without peer groups: one threshold over all sellers', 'big_rel_all' in set(r2['detail']['metric']))
     check('  ... summary without label columns', 'precision' not in r2['summary'].columns)
     check('  ... outcomes with counts only', list(r2['outcomes'].columns[-4:]) == ['txn', 'client', 'rule_type', 'group'][:0] + list(r2['outcomes'].columns[-4:])
           and 'susp_txn' not in r2['outcomes'].columns and 'def_txn' not in r2['outcomes'].columns and 'client' in r2['outcomes'].columns)
@@ -325,7 +425,10 @@ if spark is not None:
     # failures: one line + not run
     for bad, want in [(dict(CONFIG, merchant_col='nope'), 'columns not in df: nope'),
                       (dict(CONFIG, metrics=[{'name': 'x', 'kind': 'flag', 'expr': 'utilization >> 0.9'}]), 'FAILED at step 1/'),
-                      (dict(CONFIG, anchor_start='2027-01-01'), 'no anchor days')]:
+                      (dict(CONFIG, anchor_start='2027-01-01'), 'no anchor days'),
+                      (dict(CONFIG, amount_col=None), 'need amount_col'),
+                      (dict(CONFIG, peer_fallback_cols=['seller_group']), 'replaced by peer_groups'),
+                      (dict(CONFIG, anchor_start='2026-06-01'), 'needs data before the first anchor day')]:
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             r3 = run(df, bad, spark=spark)
