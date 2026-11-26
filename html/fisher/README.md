@@ -64,7 +64,21 @@ Recent and base windows of the same seller share customers, so the self test is 
 
 `detail` (pandas) has one row per tested seller × day × rule that leans upward:
 
-`anchor, recent_start, recent_end, ref_start, ref_end, merchant, peer_group, metric, comparison, unit, test, a, b, c, d, share_recent, share_ref, odds_ratio, or_lo, or_hi, p, q, n_tests` (the BH family size), `peer_sellers, fired, alert`.
+`anchor, recent_start, recent_end, ref_start, ref_end, merchant, peer_group, metric, comparison, unit, test, a, b, c, d, share_recent, share_ref, odds_ratio, or_lo, or_hi, p, q, n_tests` (the BH family size), `peer_sellers, fired, alert, txn_cnt, susp_cnt, def_cnt, obs_cnt, loan_amt`.
+
+- **Row totals**, to check the impact of each row quickly: the seller's **own transactions in the recent window** (`recent_start` to `recent_end`), counted by transaction.
+
+  | Column | Meaning |
+  |---|---|
+  | `txn_cnt` | All transactions |
+  | `susp_cnt` | Suspicious transactions |
+  | `def_cnt` | Defaulted and observed transactions |
+  | `obs_cnt` | Observed (matured) transactions |
+  | `loan_amt` | Total amount |
+
+  - They're the same for every rule and test on that seller and those days, peer rows included, since peers aren't counted.
+  - Without labels the suspicious and default columns are left out; without `amount_col`, `loan_amt` is.
+  - The same counting as `outcomes`, but per row.
 
 - **Mapping back to `df`.** `recent_start` and `recent_end` are the days behind `a` and `b`; `ref_start` and `ref_end` are the days behind `c` and `d`.
   - For self and volume tests, the ref window is the base window.

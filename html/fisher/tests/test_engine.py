@@ -305,6 +305,16 @@ if spark is not None:
         okm &= round(mine[(mine['d'] >= row['recent_start']) & (mine['d'] <= row['recent_end'])]['txn_amount'].sum()) == row['a']
         okm &= round(mine[(mine['d'] >= row['ref_start']) & (mine['d'] <= row['ref_end'])]['txn_amount'].sum()) == row['b']
     check('  ... and for money surge rows (totals)', bool(okm))
+
+    # row totals: the seller's own transactions in recent_start..recent_end
+    raw = pdf.assign(d=pdf['txn_date'].dt.normalize())
+    raw['s'] = raw['f_susp'] == 1; raw['o'] = raw['f_pd30_obs'] == 1; raw['x'] = raw['o'] & (raw['f_pd30'] == 1)
+    okt = True
+    for _, row in det.sample(500, random_state=2).iterrows():
+        w = raw[(raw['merchant_id'] == row['merchant']) & (raw['d'] >= row['recent_start']) & (raw['d'] <= row['recent_end'])]
+        want = dict(txn_cnt=len(w), susp_cnt=int(w['s'].sum()), def_cnt=int(w['x'].sum()), obs_cnt=int(w['o'].sum()))
+        okt &= all(int(row[k]) == v for k, v in want.items()) and abs(row['loan_amt'] - w['txn_amount'].sum()) < 0.01
+    check('row totals: txn_cnt, susp_cnt, def_cnt, obs_cnt, loan_amt = raw data in the recent window (500 rows, all tests)', bool(okt))
     pv = np.array([fisher_exact([[a, b], [c, d]], alternative='greater')[1]
                    for a, b, c, d in both[['a_e', 'b_e', 'c_e', 'd_e']].values])
     check('p-values = scipy', np.allclose(both['p'].values, pv, rtol=1e-6, atol=1e-12))
@@ -418,6 +428,8 @@ if spark is not None:
     check('txn only, no peers, no labels: ok', r2['ok'], buf.getvalue()[-500:])
     check('  ... only txn/self rows', set(r2['detail']['unit']) == {'txn'} and set(r2['detail']['test']) == {'self'})
     check('  ... relative amount without peer groups: one threshold over all sellers', 'big_rel_all' in set(r2['detail']['metric']))
+    check('  ... row totals without labels: txn_cnt and loan_amt only', 'txn_cnt' in r2['detail'] and 'loan_amt' in r2['detail']
+          and 'susp_cnt' not in r2['detail'] and 'def_cnt' not in r2['detail'])
     check('  ... summary without label columns', 'precision' not in r2['summary'].columns)
     check('  ... outcomes with counts only', list(r2['outcomes'].columns[-4:]) == ['txn', 'client', 'rule_type', 'group'][:0] + list(r2['outcomes'].columns[-4:])
           and 'susp_txn' not in r2['outcomes'].columns and 'def_txn' not in r2['outcomes'].columns and 'client' in r2['outcomes'].columns)

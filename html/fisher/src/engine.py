@@ -477,7 +477,7 @@ def run_fisher_backtest(df, config, spark=None):
     units = list(cfg['units'])
     steps = ['check_inputs', 'anchor_range'] + (['amount_thresholds'] if rel else []) + \
             ['spark_tests_' + u for u in units] + (['money_tests'] if money else []) + \
-            ['fisher_and_q', 'alerts', 'spark_labels', 'spark_outcomes', 'summary']
+            ['fisher_and_q', 'alerts', 'spark_labels', 'spark_row_totals', 'spark_outcomes', 'summary']
     res = {'ok': False, 'detail': None, 'summary': None, 'outcomes': None, 'failed': []}
     st = {}
     t0 = time.time()
@@ -687,6 +687,46 @@ def run_fisher_backtest(df, config, spark=None):
             st['loans'] = l
             _log(f"      {int(l['obs_n'].sum()):,} observed loans (from the first window day)")
 
+    def row_totals():
+        """Per detail row: the seller's own transactions in the recent window (recent_start..recent_end):
+        txn_cnt, susp_cnt, def_cnt (defaulted and observed), obs_cnt, loan_amt. One Spark pass to daily
+        totals per seller, then cumulative sums in pandas."""
+        det = st['detail']
+        has_s, has_d, has_a = bool(cfg['susp_cond']), bool(cfg['def_col'] and cfg['obs_col']), bool(cfg['amount_col'])
+        start = st['a_s'] - pd.Timedelta(days=st['max_back'] - 1)
+        d = F.to_date(F.col(cfg['date_col']))
+        one = lambda c: F.when(c, 1).otherwise(0)
+        aggs = [F.count(F.lit(1)).alias('txn_cnt')]
+        if has_s:
+            aggs.append(F.sum(one(F.expr(cfg['susp_cond']))).alias('susp_cnt'))
+        if has_d:
+            obs = F.col(cfg['obs_col']).cast('int') == 1
+            aggs += [F.sum(one(obs & (F.col(cfg['def_col']).cast('int') == 1))).alias('def_cnt'),
+                     F.sum(one(obs)).alias('obs_cnt')]
+        if has_a:
+            aggs.append(F.sum(F.col(cfg['amount_col']).cast('double')).alias('loan_amt'))
+        daily = (df.where(d.between(str(start.date()), str(st['a_e'].date())) & F.col(cfg['merchant_col']).isNotNull())
+                 .groupBy(F.col(cfg['merchant_col']).cast('string').alias('merchant'), d.alias('day')).agg(*aggs).toPandas())
+        cols = [c for c in ['txn_cnt', 'susp_cnt', 'def_cnt', 'obs_cnt', 'loan_amt'] if c in daily.columns]
+        if not len(det):
+            for c in cols:
+                det[c] = pd.Series(dtype=float)
+            return
+        sellers = pd.Index(sorted(set(det['merchant']) | set(daily['merchant'])))
+        n_days = (st['a_e'] - start).days + 1
+        di = (pd.to_datetime(daily['day']) - start).dt.days.values
+        si = sellers.get_indexer(daily['merchant'])
+        rs = sellers.get_indexer(det['merchant'])
+        lo = np.clip((pd.to_datetime(det['recent_start']) - start).dt.days.values, 0, n_days)
+        hi = np.clip((pd.to_datetime(det['recent_end']) - start).dt.days.values + 1, 0, n_days)
+        for c in cols:
+            M = np.zeros((len(sellers), n_days + 1))
+            np.add.at(M, (si, di + 1), daily[c].fillna(0).values.astype(float))
+            M = np.cumsum(M, axis=1)
+            v = M[rs, hi] - M[rs, lo]
+            det[c] = np.round(v, 2) if c == 'loan_amt' else v.astype(np.int64)
+        _log(f"      added {', '.join(cols)} (recent window, by transaction)")
+
     def outcomes():
         """Transactions in the recent window of fired days / alerts, per rule, against the rest of the
         anchor range: counts by transaction and by distinct client (exact, each client once per rule)."""
@@ -771,11 +811,12 @@ def run_fisher_backtest(df, config, spark=None):
                                  st['a_s'], st['a_e'], int(cfg['lift_days']))
         cols = ['anchor', 'recent_start', 'recent_end', 'ref_start', 'ref_end', 'merchant', 'peer_group', 'metric',
                 'comparison', 'unit', 'test', 'a', 'b', 'c', 'd', 'share_recent', 'share_ref', 'odds_ratio', 'or_lo',
-                'or_hi', 'p', 'q', 'n_tests', 'peer_sellers', 'fired', 'alert']
+                'or_hi', 'p', 'q', 'n_tests', 'peer_sellers', 'fired', 'alert'] + \
+               [c for c in ['txn_cnt', 'susp_cnt', 'def_cnt', 'obs_cnt', 'loan_amt'] if c in st['detail'].columns]
         st['detail'] = st['detail'][cols].sort_values(['anchor', 'p']).reset_index(drop=True)
 
     fns = [check, anchors] + ([thresholds] if rel else []) + [tests_for(u) for u in units] + \
-          ([money_step] if money else []) + [fisher, alerts, labels, outcomes, summary]
+          ([money_step] if money else []) + [fisher, alerts, labels, row_totals, outcomes, summary]
     for i, (name, fn) in enumerate(zip(steps, fns), 1):
         try:
             step(i, name, fn)

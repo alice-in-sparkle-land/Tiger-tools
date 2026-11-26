@@ -156,7 +156,7 @@ if spark is not None:
     check('  ... the planted sellers alert', set(g['detail'].loc[g['detail']['alert'], 'merchant']) >= {'M04', 'M07', 'M10'})
     dd = g['detail']
     check('  ... tests self + 3 peer groups, money surge rows, dates', {'peer:seller_group', 'peer:h3_9', 'peer:seller_group+h3_9'} <= set(dd['test'])
-          and (dd['unit'] == 'amount').any() and {'recent_start', 'recent_end', 'ref_start', 'ref_end'} <= set(dd.columns))
+          and (dd['unit'] == 'amount').any() and {'recent_start', 'recent_end', 'ref_start', 'ref_end', 'txn_cnt', 'susp_cnt', 'def_cnt', 'obs_cnt', 'loan_amt'} <= set(dd.columns))
     print(g['summary'].head(8).to_string())
     spark.stop()
 
