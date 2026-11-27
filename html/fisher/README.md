@@ -12,7 +12,7 @@ Paste the downloaded `.py` into a notebook cell where `spark` and `df` already e
 
 ```python
 r = run_fisher_backtest(df, CONFIG, spark=spark)
-detail, summary, outcomes = r['detail'], r['summary'], r['outcomes']
+detail, summary, outcomes, z_bands = r['detail'], r['summary'], r['outcomes'], r['z_bands']
 ```
 
 It prints every step. At the first failure it prints one line, `FAILED at step i/n: <step>: <error>`, then `not run: ...`, and `r['ok']` is False.
@@ -127,6 +127,26 @@ A seller is suspicious from the date of its first transaction matching the suspi
 
 Cooldown changes only the alert count (workload). Precision, recall and lead time use each seller's first alert, which is always its first fired day, and the in-window lift uses fired days.
 
+## Ratio Z (the picture's approach), for comparison
+
+The metric type **Ratio Z (picture)** (`kind: 'ratio_z'`) runs the ratio method from the team's note next to the tests, so the backtest can compare the two on the same data. It is **not a hypothesis test**: no p, q, fired or alert, and it is left out of `summary` and `outcomes`. Its results are a z spectrum in `z_bands`.
+
+- **The ratio:**
+  - MP = the seller's **average daily amount** in the recent window.
+  - The reference is its average daily amount in the base window (`self`), or the average MP of the **other active sellers** in its peer group over the same days (`peer:<group>`, at least `min_peers` of them).
+  - r = (MP − ref) / (MP + ref), clipped to ±0.999.
+  - **Raw z** = 0.5 ln((1+r)/(1−r)), which equals 0.5 ln(MP / ref). So 0.35 ≈ 2×, 0.55 ≈ 3×, 1 ≈ 7× and 1.96 ≈ 50×.
+- **AND / OR:** `and:<group>` = the smaller of the self and peer z, `or:<group>` = the larger, when both exist.
+- **Standardised z** = (z − median) / (1.4826 × MAD) across the sellers tested that day. For self that's all sellers; for peer, AND and OR it's per group value. It needs at least 5 sellers and some spread, otherwise it's empty.
+- **Gate:** at least `min_total` transactions in the recent window.
+- **`detail`:** rows with z_raw > 0, `unit = ratio`, with `z_raw`, `z_std`, `mp_per_day`, `ref_per_day`, the dates and the row totals.
+- **`z_bands`:** one row per metric × comparison × test × scale (`raw` / `std`) × band.
+  - Each transaction in the anchor range takes the **largest** z of the seller-days whose recent window covers it.
+  - Columns: `seller_days` (tested seller-days whose own z is in the band), `txn`, `client`, `susp_txn`, `susp_client`, `obs_txn`, `obs_client`, `def_txn`, `def_client`, `amount`, and the four rates.
+  - `not tested` holds the transactions no tested seller-day covers. `n/a` (std only) means too few sellers or no spread.
+  - Band edges are set per metric in the form. Defaults: raw `0, 0.35, 0.55, 1, 1.96`; std `0, 1, 2, 3`.
+- **Reading it:** rates rising with z means the ratio separates bad sellers from good. Compare those rates with `q_bands` and `outcomes` for the Fisher and money surge rules on the same comparison.
+
 ## Outcomes by q band (extra cell)
 
 `extras/fisher_q_bands_cell.py` shows whether smaller q-values go with more suspicious and defaulted transactions. Run it **after** the backtest, in the same notebook: it uses `df`, `spark`, `CONFIG` and `detail`, and gives `q_bands`.
@@ -156,7 +176,7 @@ The heavy work runs in Spark, in one pass per count unit. Counting by customers 
 python html/fisher/build.py                 # src/ -> fisher_backtest_builder.html
 python html/fisher/tests/test_engine.py     # Fisher vs scipy; full run vs a brute-force rebuild on local Spark
 python html/fisher/tests/test_page.py       # Playwright at 1280px and 360px, then runs a downloaded .py on Spark
-python html/fisher/tests/test_q_bands.py    # the q-band cell vs a transaction-by-transaction rebuild
+python html/fisher/tests/test_q_bands.py    # the q-band cell vs a transaction-by-transaction rebuild (skips ratio rows)
 ```
 
 | File | What it is |

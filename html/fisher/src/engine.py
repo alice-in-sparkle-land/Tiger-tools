@@ -443,6 +443,148 @@ def _money_tests(daily, metric, comparisons, cfg, start, a_s, a_e):
     return det, fam[fam['n_tests'] > 0]
 
 
+RAW_EDGES = [0.0, 0.35, 0.55, 1.0, 1.96]     # raw z = 0.5 ln(MP / ref): about 2x, 3x, 7x, 50x
+STD_EDGES = [0.0, 1.0, 2.0, 3.0]             # standardised z: spreads above the typical seller
+
+
+def _band_labels(edges, unit=''):
+    e = [('%g' % x) for x in edges]
+    return ['below ' + e[0]] + [e[i] + '-' + e[i + 1] for i in range(len(e) - 1)] + [e[-1] + '+']
+
+
+def _ratio_z(cd, codes, values, labels, metric, comparisons, cfg, start, a_s, a_e):
+    """Ratio Z (the picture's approach), per seller and anchor day.
+
+    MP = the seller's average daily amount in the recent window; the reference is its average
+    daily amount in the base window (self) or the average MP of the OTHER active sellers in its
+    peer group (peer). r = (MP - ref) / (MP + ref), clipped to +-0.999, z = 0.5 ln((1+r)/(1-r)).
+    and:<group> = the smaller of z_self and z_peer, or:<group> = the larger, when both exist. Standardised z =
+    (z - median) / (1.4826 MAD) across the sellers tested that day (per group value for peer,
+    and, or), when at least 5 sellers and MAD > 0. Not a test: no p, q, fired or alert.
+
+    cd: one row per seller x day x client (n, s, o, x, amt). Returns (detail rows with z_raw > 0,
+    z_bands table)."""
+    raw_e = [float(x) for x in metric.get('raw_edges') or RAW_EDGES]
+    std_e = [float(x) for x in metric.get('std_edges') or STD_EDGES]
+    sellers = codes.index.values
+    S, D = len(sellers), (a_e - start).days + 1
+    si = codes.index.get_indexer(cd['merchant']); di = (cd['day'] - start).dt.days.values
+    A = np.zeros((S, D)); N = np.zeros((S, D))
+    np.add.at(A, (si, di), cd['amt'].values.astype(float)); np.add.at(N, (si, di), cd['n'].values.astype(float))
+    cA = np.concatenate([np.zeros((S, 1)), np.cumsum(A, axis=1)], axis=1)
+    cN = np.concatenate([np.zeros((S, 1)), np.cumsum(N, axis=1)], axis=1)
+    ia, ie = (a_s - start).days, (a_e - start).days
+    zf = lambda x, ref: np.arctanh(np.clip(np.where(x + ref > 0, (x - ref) / np.where(x + ref > 0, x + ref, 1), 0.0),
+                                           -0.999, 0.999))
+    in_rng = (di >= ia) & (di <= ie)
+    cdr = cd[in_rng]; rsi, rdi = si[in_rng], di[in_rng]
+    cl_codes, cl_uni = pd.factorize(cdr['client'])
+    NC = _max(len(cl_uni), 1)
+    det_rows, band_rows = [], []
+    for c in comparisons:
+        (rs, re_), (bs, be) = c['recent'], c['base']
+        idx = np.arange(_max(ia, be - 1), ie + 1)
+        if not len(idx):
+            continue
+        ws = lambda C, lo, hi: C[:, idx - lo + 2] - C[:, idx - hi + 1]
+        MP = ws(cA, rs, re_) / (re_ - rs + 1); RP = ws(cA, bs, be) / (be - bs + 1); NR = ws(cN, rs, re_)
+        G = NR >= cfg['min_total']
+        rules = [('self', np.where(G, zf(MP, RP), np.nan), np.where(G, RP, np.nan), None)]
+        active = MP > 0
+        for gi, lab in enumerate(labels):
+            cg = codes['g%d' % gi].values
+            ng = _max(cg.max() + 1, 1)
+            T = len(idx)
+            gs = np.zeros((ng, T)); gc = np.zeros((ng, T))
+            rows_ = np.repeat(cg[:, None], T, axis=1); cols_ = np.repeat(np.arange(T)[None, :], S, axis=0)
+            np.add.at(gs, (rows_, cols_), MP * active); np.add.at(gc, (rows_, cols_), active.astype(float))
+            oc = gc[cg] - active; osum = gs[cg] - MP * active
+            avg = np.where(oc > 0, osum / np.where(oc > 0, oc, 1), np.nan)
+            ok = G & (oc >= cfg['min_peers'])
+            zp = np.where(ok, zf(MP, np.nan_to_num(avg)), np.nan)
+            zs = rules[0][1]
+            both = ok & ~np.isnan(zs)
+            rules += [('peer:' + lab, zp, np.where(ok, avg, np.nan), gi),
+                      ('and:' + lab, np.where(both, np.fmin(zs, zp), np.nan), np.full_like(zp, np.nan), gi),
+                      ('or:' + lab, np.where(both, np.fmax(zs, zp), np.nan), np.full_like(zp, np.nan), gi)]
+        for test, Z, REF, gi in rules:
+            tested = ~np.isnan(Z)
+            # standardised z: per anchor (and group value) across tested sellers
+            s_i, t_i = np.nonzero(tested)
+            grp = codes['g%d' % gi].values[s_i] if gi is not None else np.zeros(len(s_i), dtype=int)
+            L = pd.DataFrame({'t': t_i, 'g': grp, 'z': Z[s_i, t_i]})
+            gb = L.groupby(['t', 'g'])['z']
+            med = gb.transform('median'); cnt = gb.transform('size')
+            mad = (L['z'] - med).abs().groupby([L['t'], L['g']]).transform('median') * 1.4826
+            zstd = np.where((cnt >= 5) & (mad > 0), (L['z'] - med) / mad.where(mad > 0, 1), np.nan)
+            ZS = np.full(Z.shape, np.nan); ZS[s_i, t_i] = zstd
+            # detail rows: leaning up (z_raw > 0)
+            up = L['z'].values > 0
+            if up.any():
+                su, tu = s_i[up], t_i[up]
+                anch = start + pd.to_timedelta(idx[tu], unit='D')
+                ref_recent = test.startswith('peer')
+                det_rows.append(pd.DataFrame({
+                    'anchor': anch, 'merchant': sellers[su],
+                    'peer_group': (values[gi][codes['g%d' % gi].values[su]] if gi is not None else None),
+                    'metric': metric['name'], 'comparison': c['name'], 'unit': 'ratio', 'test': test,
+                    'z_raw': Z[su, tu], 'z_std': ZS[su, tu], 'mp_per_day': MP[su, tu], 'ref_per_day': REF[su, tu],
+                    'recent_start': anch - pd.Timedelta(days=re_ - 1), 'recent_end': anch - pd.Timedelta(days=rs - 1),
+                    'ref_start': anch - pd.Timedelta(days=(re_ if ref_recent else be) - 1),
+                    'ref_end': anch - pd.Timedelta(days=(rs if ref_recent else bs) - 1)}))
+            # coverage: each seller-day takes the largest z of the anchors whose recent window covers it
+            for scale, M, edges in [('raw', Z, raw_e), ('std', ZS, std_e)]:
+                ZD = np.full((S, D), np.nan); ZD[:, idx] = M
+                TD = np.zeros((S, D), dtype=bool); TD[:, idx] = tested
+                cov = np.full((S, D), np.nan); tcov = np.zeros((S, D), dtype=bool)
+                for k in range(rs - 1, re_):
+                    if k >= D:
+                        break
+                    sh = np.full((S, D), np.nan); sh[:, :D - k] = ZD[:, k:]
+                    cov = np.fmax(cov, sh)
+                    tb = np.zeros((S, D), dtype=bool); tb[:, :D - k] = TD[:, k:]
+                    tcov |= tb
+                nb = len(edges) + 1
+                band = np.where(~tcov, nb + 1, np.where(np.isnan(cov), nb, 0))
+                okb = ~np.isnan(cov)
+                band[okb] = np.searchsorted(np.asarray(edges), cov[okb], side='right')
+                b = band[rsi, rdi]
+                K = nb + 2
+                cnt_ = lambda w: np.bincount(b, weights=w, minlength=K)
+                def ncl(mask):
+                    key = b[mask].astype(np.int64) * NC + cl_codes[mask]
+                    u = np.unique(key)
+                    return np.bincount((u // NC).astype(int), minlength=K)
+                tx = cnt_(cdr['n'].values.astype(float)); sx = cnt_(cdr['s'].values.astype(float))
+                ox = cnt_(cdr['o'].values.astype(float)); xx = cnt_(cdr['x'].values.astype(float))
+                ax = cnt_(cdr['amt'].values.astype(float))
+                allm = np.ones(len(b), dtype=bool)
+                c_all, c_s = ncl(allm), ncl(cdr['s'].values > 0)
+                c_o, c_x = ncl(cdr['o'].values > 0), ncl(cdr['x'].values > 0)
+                own = M[tested]
+                sb = np.where(np.isnan(own), nb, np.searchsorted(np.asarray(edges), np.nan_to_num(own), side='right'))
+                sd_ = np.bincount(sb, minlength=K)
+                names = _band_labels(edges) + ['n/a (under 5 sellers or no spread)', 'not tested']
+                for k_ in range(K):
+                    if scale == 'raw' and k_ == nb:
+                        continue
+                    band_rows.append({'metric': metric['name'], 'comparison': c['name'], 'test': test, 'scale': scale,
+                                      'band_order': k_, 'band': names[k_],
+                                      'seller_days': int(sd_[k_]) if k_ <= nb else 0,
+                                      'txn': int(tx[k_]), 'client': int(c_all[k_]),
+                                      'susp_txn': int(sx[k_]), 'susp_client': int(c_s[k_]),
+                                      'obs_txn': int(ox[k_]), 'obs_client': int(c_o[k_]),
+                                      'def_txn': int(xx[k_]), 'def_client': int(c_x[k_]),
+                                      'amount': _round(float(ax[k_]), 2)})
+    det = pd.concat(det_rows, ignore_index=True) if det_rows else pd.DataFrame()
+    zb = pd.DataFrame(band_rows)
+    if len(zb):
+        dv = lambda a, b: (zb[a] / zb[b].where(zb[b] > 0)).round(4)
+        zb['susp_rate_txn'], zb['susp_rate_client'] = dv('susp_txn', 'txn'), dv('susp_client', 'client')
+        zb['def_rate_txn'], zb['def_rate_client'] = dv('def_txn', 'obs_txn'), dv('def_client', 'obs_client')
+    return det, zb
+
+
 # ---------------------------------------------------------------------------- main
 def run_fisher_backtest(df, config, spark=None):
     """Rolling backtest of Fisher-test triggers. Every day in the anchor range plays 'today'.
@@ -472,13 +614,15 @@ def run_fisher_backtest(df, config, spark=None):
         elif m['kind'] in ('flag', 'volume'):
             metrics.append(m)
     money = [m['name'] for m in user_metrics if m['kind'] == 'money']
+    ratio = [m for m in user_metrics if m['kind'] == 'ratio_z']
     kinds = {m['name']: ('amount' if m['kind'] == 'money' else 'volume' if m['kind'] == 'volume' else 'flag')
              for m in metrics + [m for m in user_metrics if m['kind'] == 'money']}
     units = list(cfg['units'])
     steps = ['check_inputs', 'anchor_range'] + (['amount_thresholds'] if rel else []) + \
             ['spark_tests_' + u for u in units] + (['money_tests'] if money else []) + \
-            ['fisher_and_q', 'alerts', 'spark_labels', 'spark_row_totals', 'spark_outcomes', 'summary']
-    res = {'ok': False, 'detail': None, 'summary': None, 'outcomes': None, 'failed': []}
+            ['fisher_and_q', 'alerts'] + (['ratio_z'] if ratio else []) + \
+            ['spark_labels', 'spark_row_totals', 'spark_outcomes', 'summary']
+    res = {'ok': False, 'detail': None, 'summary': None, 'outcomes': None, 'z_bands': None, 'failed': []}
     st = {}
     t0 = time.time()
 
@@ -493,9 +637,9 @@ def run_fisher_backtest(df, config, spark=None):
         if cfg.get('peer_fallback_cols'):
             raise ValueError('peer_fallback_cols was replaced by peer_groups: list each group to test')
         need = [cfg['date_col'], cfg['merchant_col'], cfg['customer_col']] + [c for g in groups for c in g]
-        if rel or money:
+        if rel or money or ratio:
             if not cfg['amount_col']:
-                raise ValueError('relative amount and money surge metrics need amount_col')
+                raise ValueError('relative amount, money surge and ratio z metrics need amount_col')
             need.append(cfg['amount_col'])
         miss = [c for c in dict.fromkeys(need) if c not in df.columns]
         if miss:
@@ -506,7 +650,7 @@ def run_fisher_backtest(df, config, spark=None):
         if len(set(names)) != len(names):
             raise ValueError('metric names must be unique (relative amount adds <name>_<group> metrics)')
         for m in user_metrics:
-            if m['kind'] not in ('flag', 'volume', 'rel_amount', 'money'):
+            if m['kind'] not in ('flag', 'volume', 'rel_amount', 'money', 'ratio_z'):
                 raise ValueError(f"metric {m['name']}: unknown kind {m['kind']}")
             if m['kind'] == 'rel_amount' and not (0 < float(m.get('level', 0.9)) < 1):
                 raise ValueError(f"metric {m['name']}: level must be between 0 and 1, e.g. 0.9")
@@ -668,6 +812,52 @@ def run_fisher_backtest(df, config, spark=None):
         st['detail'] = _alerts(st['detail'], int(cfg['cooldown']))
         _log(f"      {int(st['detail']['alert'].sum()):,} alerts after the {cfg['cooldown']}-day cooldown")
 
+    def ratio_step():
+        """Ratio Z rules (the picture's approach): z per seller-day, detail rows and z_bands."""
+        d = F.to_date(F.col(cfg['date_col']))
+        start = st['a_s'] - pd.Timedelta(days=st['max_back'] - 1)
+        one = lambda c: F.when(c, 1).otherwise(0)
+        has_s, has_d = bool(cfg['susp_cond']), bool(cfg['def_col'] and cfg['obs_col'])
+        obs = (F.col(cfg['obs_col']).cast('int') == 1) if has_d else F.lit(False)
+        src = df.where(d.between(str(start.date()), str(st['a_e'].date())) & F.col(cfg['merchant_col']).isNotNull())
+        cd = (src.groupBy(F.col(cfg['merchant_col']).cast('string').alias('merchant'), d.alias('day'),
+                          F.col(cfg['customer_col']).cast('string').alias('client'))
+              .agg(F.count(F.lit(1)).alias('n'),
+                   F.sum(one(F.expr(cfg['susp_cond'])) if has_s else F.lit(0)).alias('s'),
+                   F.sum(one(obs)).alias('o'),
+                   F.sum(one(obs & (F.col(cfg['def_col']).cast('int') == 1)) if has_d else F.lit(0)).alias('x'),
+                   F.sum(F.col(cfg['amount_col']).cast('double')).alias('amt')).toPandas())
+        cd['day'] = pd.to_datetime(cd['day']); cd['amt'] = cd['amt'].fillna(0.0)
+        _log(f"      {len(cd):,} seller-day-client rows")
+        sellers = sorted(cd['merchant'].unique())
+        if groups:
+            gm = src.groupBy(F.col(cfg['merchant_col']).cast('string').alias('merchant')).agg(
+                *[F.first(grp(g), ignorenulls=True).alias('g%d' % i) for i, g in enumerate(groups)]).toPandas()
+            gm = gm.set_index('merchant').reindex(sellers)
+        else:
+            gm = pd.DataFrame(index=pd.Index(sellers, name='merchant'))
+        codes = pd.DataFrame(index=gm.index); values = []
+        for i in range(len(groups)):
+            cc, uu = pd.factorize(gm['g%d' % i].fillna('(null)'))
+            codes['g%d' % i] = cc; values.append(np.asarray(uu, dtype=object))
+        dets, zbs = [], []
+        for m in ratio:
+            det_r, zb = _ratio_z(cd, codes, values, cfg['_peer_labels'], m, comparisons, cfg, start, st['a_s'], st['a_e'])
+            dets.append(det_r); zbs.append(zb)
+            _log(f"      {m['name']}: {len(det_r):,} seller-days with z > 0, {len(zb):,} band rows")
+        add = pd.concat(dets, ignore_index=True) if dets else pd.DataFrame()
+        if len(add):
+            if len(add) + len(st['detail']) > cfg['max_rows'] * 2:
+                raise ValueError(f"{len(add):,} ratio z rows: too many for pandas. Shorten the anchor range "
+                                 f"or raise min_total")
+            det = pd.concat([st['detail'], add], ignore_index=True)
+            for c_ in 'abcd':
+                det[c_] = det[c_].astype('Int64')
+            det['fired'] = det['fired'].fillna(False).astype(bool); det['alert'] = det['alert'].fillna(False).astype(bool)
+            st['detail'] = det
+        st['z_bands'] = pd.concat(zbs, ignore_index=True).sort_values(
+            ['metric', 'comparison', 'test', 'scale', 'band_order']).reset_index(drop=True)
+
     def labels():
         st['susp'] = st['loans'] = None
         m = F.col(cfg['merchant_col']).cast('string')
@@ -731,7 +921,7 @@ def run_fisher_backtest(df, config, spark=None):
         """Transactions in the recent window of fired days / alerts, per rule, against the rest of the
         anchor range: counts by transaction and by distinct client (exact, each client once per rule)."""
         a_s, a_e = st['a_s'], st['a_e']
-        rules, iv = _intervals(st['detail'], comparisons)
+        rules, iv = _intervals(st['detail'][st['detail']['unit'] != 'ratio'], comparisons)
         iv['start'] = iv['start'].clip(lower=a_s); iv['end'] = iv['end'].clip(upper=a_e)
         iv = iv[iv['start'] <= iv['end']]
         has_s, has_d = bool(cfg['susp_cond']), bool(cfg['def_col'] and cfg['obs_col'])
@@ -806,17 +996,19 @@ def run_fisher_backtest(df, config, spark=None):
         _log(f"      {len(iv):,} seller day ranges; outcomes for {len(rules)} rules")
 
     def summary():
-        st['summary'] = _summary(st['detail'], st['fam'], st['n_days'], comparisons,
+        st['summary'] = _summary(st['detail'][st['detail']['unit'] != 'ratio'], st['fam'], st['n_days'], comparisons,
                                  [{'name': k, 'kind': v} for k, v in kinds.items()], st['susp'], st['loans'],
                                  st['a_s'], st['a_e'], int(cfg['lift_days']))
         cols = ['anchor', 'recent_start', 'recent_end', 'ref_start', 'ref_end', 'merchant', 'peer_group', 'metric',
                 'comparison', 'unit', 'test', 'a', 'b', 'c', 'd', 'share_recent', 'share_ref', 'odds_ratio', 'or_lo',
                 'or_hi', 'p', 'q', 'n_tests', 'peer_sellers', 'fired', 'alert'] + \
+               [c for c in ['z_raw', 'z_std', 'mp_per_day', 'ref_per_day'] if c in st['detail'].columns] + \
                [c for c in ['txn_cnt', 'susp_cnt', 'def_cnt', 'obs_cnt', 'loan_amt'] if c in st['detail'].columns]
         st['detail'] = st['detail'][cols].sort_values(['anchor', 'p']).reset_index(drop=True)
 
     fns = [check, anchors] + ([thresholds] if rel else []) + [tests_for(u) for u in units] + \
-          ([money_step] if money else []) + [fisher, alerts, labels, row_totals, outcomes, summary]
+          ([money_step] if money else []) + [fisher, alerts] + ([ratio_step] if ratio else []) + \
+          [labels, row_totals, outcomes, summary]
     for i, (name, fn) in enumerate(zip(steps, fns), 1):
         try:
             step(i, name, fn)
@@ -828,6 +1020,6 @@ def run_fisher_backtest(df, config, spark=None):
                 _log(f"  not run: {', '.join(rest)}")
             res.update(failed_step=name, error=str(e), failed=[name])
             return res
-    res.update(ok=True, detail=st['detail'], summary=st['summary'], outcomes=st['outcomes'])
+    res.update(ok=True, detail=st['detail'], summary=st['summary'], outcomes=st['outcomes'], z_bands=st.get('z_bands'))
     _log(f"\nDone in {time.time() - t0:.0f}s: {len(st['detail']):,} detail rows, {len(st['summary'])} rules.")
     return res

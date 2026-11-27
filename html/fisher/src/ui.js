@@ -4,6 +4,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
 const IDENT=/^[A-Za-z_][A-Za-z0-9_]*$/;
+const RAW_E='0, 0.35, 0.55, 1, 1.96',STD_E='0, 1, 2, 3';
 const DEF={
   cols:{date:'txn_date',merchant:'merchant_id',customer:'client_id',amount:'txn_amount'},
   units:{customer:true,txn:true},
@@ -11,7 +12,8 @@ const DEF={
            {name:'big_ticket',kind:'amount',expr:'',op:'>=',value:'5000000',from:'',to:'',level:'90'},
            {name:'big_rel',kind:'rel',expr:'',op:'>=',value:'',from:'',to:'',level:'90'},
            {name:'volume',kind:'volume',expr:'',op:'>=',value:'',from:'',to:'',level:'90'},
-           {name:'money_surge',kind:'money',expr:'',op:'>=',value:'',from:'',to:'',level:'90'}],
+           {name:'money_surge',kind:'money',expr:'',op:'>=',value:'',from:'',to:'',level:'90'},
+           {name:'amount_ratio',kind:'ratio',expr:'',op:'>=',value:'',from:'',to:'',level:'90',rawEdges:RAW_E,stdEdges:STD_E}],
   comps:[{rs:1,re:1,bs:2,be:8},{rs:1,re:7,bs:8,be:15},{rs:1,re:7,bs:8,be:35},{rs:1,re:30,bs:31,be:90}],
   anchor:{start:'',end:'',skipLast:false},
   peer:{on:true,groups:['seller_group','h3_9','seller_group, h3_9'],min:'3'},
@@ -19,8 +21,10 @@ const DEF={
   rule:{q:'0.05',or:'2',cooldown:'7',minTotal:'10',minFlag:'5',maxRows:'3000000',bh:'rule'}
 };
 const clone=o=>JSON.parse(JSON.stringify(o));
-const KINDS=[['flag','Flag share'],['amount','Amount flag'],['range','Amount range'],['rel','Relative amount'],['money','Money surge'],['volume','Volume']];
-const NEEDS_AMT=['amount','range','rel','money'];
+const KINDS=[['flag','Flag share'],['amount','Amount flag'],['range','Amount range'],['rel','Relative amount'],['money','Money surge'],['ratio','Ratio Z (picture)'],['volume','Volume']];
+const NEEDS_AMT=['amount','range','rel','money','ratio'];
+const edges=v=>String(v).split(',').map(x=>x.trim()).filter(Boolean);
+const edgesOk=v=>{const e=edges(v);return e.length>0&&e.every(isNum)&&e.every((x,i)=>i===0||+x>+e[i-1]);};
 let state=clone(DEF),storageOk=true,pending=null;
 
 /* ---------- state ---------- */
@@ -31,7 +35,8 @@ function sanitize(o){
   s.peer.groups=s.peer.groups.map(String);
   if(Array.isArray(o.metrics))s.metrics=o.metrics.filter(m=>m&&typeof m==='object').map(m=>({name:String(m.name||''),
     kind:KINDS.map(k=>k[0]).includes(m.kind)?m.kind:'flag',expr:String(m.expr||''),op:['>=','>','<=','<'].includes(m.op)?m.op:'>=',
-    value:String(m.value||''),from:String(m.from||''),to:String(m.to||''),level:String(m.level||'90')}));
+    value:String(m.value||''),from:String(m.from||''),to:String(m.to||''),level:String(m.level||'90'),
+    rawEdges:String(m.rawEdges||RAW_E),stdEdges:String(m.stdEdges||STD_E)}));
   if(Array.isArray(o.comps))s.comps=o.comps.filter(c=>c&&typeof c==='object').map(c=>({rs:+c.rs||0,re:+c.re||0,bs:+c.bs||0,be:+c.be||0}));
   return s;
 }
@@ -64,7 +69,8 @@ function validate(){
     if(NEEDS_AMT.includes(m.kind)&&!state.cols.amount.trim())add('m'+i,'Fill in the Amount column first (section 1).');
     if(m.kind==='amount'&&!isNum(m.value))add('m'+i,'Enter a number.');
     if(m.kind==='range'){if(!isNum(m.from)||!isNum(m.to))add('m'+i,'Enter both amounts.');else if(+m.from>=+m.to)add('m'+i,'From must be below To.');}
-    if(m.kind==='rel'&&(!isNum(m.level)||+m.level<50||+m.level>=100))add('m'+i,'Percentile between 50 and 99.9.');});
+    if(m.kind==='rel'&&(!isNum(m.level)||+m.level<50||+m.level>=100))add('m'+i,'Percentile between 50 and 99.9.');
+    if(m.kind==='ratio'&&(!edgesOk(m.rawEdges)||!edgesOk(m.stdEdges)))add('m'+i,'Band edges: numbers separated by commas, in increasing order.');});
   const exp=[];state.metrics.forEach(m=>{const n=m.name.trim();if(m.kind!=='rel'){exp.push(n);return;}
     const gs=state.peer.on?state.peer.groups.map(list).filter(g=>g.length):[];(gs.length?gs:[['all']]).forEach(g=>exp.push(n+'_'+g.join('_')));});
   const dup=exp.filter((n,i)=>n&&exp.indexOf(n)!==i);if(dup.length)add('metrics','Metric names clash after relative amount adds one per group: '+[...new Set(dup)].join(', ')+'.');
@@ -103,6 +109,7 @@ function metricExpr(m){const a=state.cols.amount.trim();
 function metricCfg(m){const n=m.name.trim();
   if(m.kind==='volume')return {name:n,kind:'volume'};
   if(m.kind==='money')return {name:n,kind:'money'};
+  if(m.kind==='ratio')return {name:n,kind:'ratio_z',raw_edges:edges(m.rawEdges).map(Number),std_edges:edges(m.stdEdges).map(Number)};
   if(m.kind==='rel')return {name:n,kind:'rel_amount',level:Math.round(+m.level*10)/1000};
   return {name:n,kind:'flag',expr:metricExpr(m)};}
 function config(){
@@ -146,6 +153,7 @@ function generate(){
     'Money surge metrics run self only, on daily total amount (rank test), in unit "amount".',
     'detail has recent_start/recent_end (days behind a, b) and ref_start/ref_end (days behind c, d), and the',
     "seller's own totals in the recent window: txn_cnt, susp_cnt, def_cnt, obs_cnt, loan_amt (by transaction).",
+    'Ratio Z metrics (the picture) add rows with unit "ratio" (z_raw, z_std) to detail and fill z_bands.',
     '',
     'Returns detail (one row per tested seller x day x rule), summary (one row per rule) and outcomes',
     '(per rule: transactions in the recent window of fired days / alerts vs the rest, by transaction and client).',
@@ -157,7 +165,7 @@ function generate(){
     '',
     '# ---------------------------------------------------------------------------- run',
     'r = run_fisher_backtest(df, CONFIG, spark=spark)',
-    "detail, summary, outcomes = r['detail'], r['summary'], r['outcomes']",
+    "detail, summary, outcomes, z_bands = r['detail'], r['summary'], r['outcomes'], r['z_bands']",
     'summary',''].join('\n');
 }
 function fileName(){return 'fisher_backtest_'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'.py';}
@@ -173,6 +181,7 @@ function renderLists(){
     (m.kind==='range'?'<div class="irow"><code>'+esc(state.cols.amount||'amount')+'</code> from<input class="in" data-m="from" value="'+esc(m.from)+'" inputmode="decimal" style="flex:1 1 90px" aria-label="From amount">to<input class="in" data-m="to" value="'+esc(m.to)+'" inputmode="decimal" style="flex:1 1 90px" aria-label="To amount"></div>':'')+
     (m.kind==='rel'?'<div class="irow"><span>Percentile</span><input class="in num" data-m="level" value="'+esc(m.level)+'" inputmode="decimal" aria-label="Percentile"><span class="muted">of the peer group\'s amounts</span></div><div class="hint" style="margin:6px 0 0">Flags a transaction above that percentile. One metric per peer group (<code>'+esc(m.name||'name')+'_&lt;group&gt;</code>). Percentiles use only data before the first anchor day.</div>':'')+
     (m.kind==='money'?'<div class="irow muted">Rank test (Mann-Whitney) on the seller\'s daily total amount, recent days vs base days; no-sale days count as 0. Self only. Skips comparisons with a recent window under 3 days. Fires on q alone.</div>':'')+
+    (m.kind==='ratio'?'<div class="irow"><span>Raw z bands</span><input class="in" data-m="rawEdges" value="'+esc(m.rawEdges)+'" style="flex:1 1 140px" aria-label="Raw z band edges"></div><div class="irow"><span>Standardised bands</span><input class="in" data-m="stdEdges" value="'+esc(m.stdEdges)+'" style="flex:1 1 140px" aria-label="Standardised z band edges"></div><div class="hint" style="margin:6px 0 0">The picture\'s method: r = (MP − ref) / (MP + ref) on average daily amount, clipped to ±0.999, z = 0.5 ln((1+r)/(1−r)). Ref = the seller\'s base window (self) or the other sellers\' average in each peer group (peer), plus AND / OR of the two. Raw z 0.35 ≈ 2×, 0.55 ≈ 3×, 1 ≈ 7×, 1.96 ≈ 50×. Standardised z = against the other sellers that day. Not a test: it fills <code>z_bands</code> and <code>detail</code>, no alerts.</div>':'')+
     (m.kind==='volume'?'<div class="irow muted">Seller\'s share of all transactions (self) or of each peer group (peer).</div>':'')+
     '<div class="err" id="e-m'+i+'"></div></div>').join('');
   $('#pgroups').innerHTML=state.peer.groups.map((g,i)=>'<div class="cmp pg" data-i="'+i+'"><div class="chead"><input class="in" data-g="'+i+'" value="'+esc(g)+'" placeholder="seller_group, h3_9" aria-label="Peer group columns" style="flex:1;margin:0"><button class="x" data-del-g="'+i+'" aria-label="Remove peer group">Remove</button></div><div class="muted" style="font-size:12.5px;margin-top:4px">test: <code>peer:'+esc(list(g).join('+')||'?')+'</code></div><div class="err" id="e-g'+i+'"></div></div>').join('');
@@ -235,7 +244,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     else state.comps.splice(+t.dataset.delC,1);save();renderLists();refresh();});
   $('#addGroup').onclick=()=>{state.peer.groups.push('');save();renderLists();refresh();const l=document.querySelectorAll('[data-g]');l[l.length-1].focus();};
   $('#addMetric').onclick=()=>{let n=state.metrics.length+1;while(state.metrics.some(m=>m.name==='metric_'+n))n++;
-    state.metrics.push({name:'metric_'+n,kind:'flag',expr:'',op:'>=',value:'',from:'',to:'',level:'90'});save();renderLists();refresh();document.querySelector('.item:last-child [data-m="expr"]').focus();};
+    state.metrics.push({name:'metric_'+n,kind:'flag',expr:'',op:'>=',value:'',from:'',to:'',level:'90',rawEdges:RAW_E,stdEdges:STD_E});save();renderLists();refresh();document.querySelector('.item:last-child [data-m="expr"]').focus();};
   $('#addComp').onclick=()=>{state.comps.push({rs:1,re:14,bs:15,be:60});save();renderLists();refresh();};
   $('#reset').onclick=()=>sheet('<h3>Reset</h3><p>Go back to the example settings? Your current settings are lost unless you export them first.</p><div class="row-end"><button data-s="close">Cancel</button><button class="primary" data-s="reset">Reset</button></div>');
   $('#copy').onclick=async()=>{if(Object.keys(lastErr).length)return banner('Fix the problems listed above first.',true);

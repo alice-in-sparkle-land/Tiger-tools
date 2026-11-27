@@ -11,7 +11,7 @@ It is built as a **backtest**. Every past day is replayed as if it were today, s
 The tool has two parts:
 
 - **Fisher Backtest Builder** (`fisher_backtest_builder.html` in this folder): a page where you declare columns, metrics and comparisons; it writes one Python file.
-- **The generated file**: runs on the notebook's `spark` and transaction-level `df`, and returns `detail` (every test), `summary` (one row per rule) and `outcomes` (what each rule caught).
+- **The generated file**: runs on the notebook's `spark` and transaction-level `df`, and returns `detail` (every test), `summary` (one row per rule), `outcomes` (what each rule caught) and `z_bands` (the Ratio Z spectrum).
 
 ## Rolling backtest
 
@@ -143,6 +143,18 @@ Example: 60 transactions, 50 of them from high-utilisation customers, but those 
   - rates rising as q falls: the test works;
   - rates flat across bands: the metric doesn't separate sellers;
   - a high rate in `not in detail`: bad sellers are never tested.
+
+## Ratio Z: the alternative approach, run for comparison
+
+The team's note proposed a different rule: compare a seller's money in the monitoring period (MP) with its own past (RP) and with the average seller in its segment, through a bounded ratio and Fisher's z-transformation. The backtest runs it next to the tests so both can be judged on the same data.
+
+- **The ratio:** r = (MP − ref) / (MP + ref) on **average daily** amounts, clipped to ±0.999, then z = 0.5 ln((1 + r)/(1 − r)).
+- **What z really is:** z = 0.5 ln(MP ÷ ref), half the log of the ratio. 0.35 ≈ 2×, 0.55 ≈ 3×, 1 ≈ 7×, 1.96 ≈ 50×.
+- **Not a test on its own:** this is Fisher's *z-transformation* (made for correlation coefficients), not Fisher's *exact test*. On its own z is a size measure with no p-value. The step that would give it meaning is comparing it with other sellers, so the backtest also computes a **standardised z** = (z − median) / (1.4826 × MAD) across the sellers tested that day, per peer group.
+- **Rules:** `self` (vs own base window), `peer:<group>` (vs the average of the other active sellers in the group, same days), and `and:<group>` / `or:<group>` (the smaller / larger of the two z).
+- **No cut-off yet:** instead of firing alerts, the backtest reports a **spectrum** in `z_bands`: for each rule and band of raw or standardised z, the transactions, clients, suspicious, defaults and amount they cover, and the rates.
+
+**How to compare it with the tests:** for the same comparison, read down `z_bands` and down `q_bands`. The approach whose top bands carry clearly higher suspicious and default rates, at a workload the team can handle, separates bad sellers better. Its main weakness is that it ignores how much data a seller has: 1M → 3M and 1B → 3B get the same z.
 
 ## Design choices and limitations
 

@@ -29,7 +29,7 @@ def q_band_outcomes(df, detail, config, spark, bands=BANDS):
     has_s = bool(cfg.get('susp_cond'))
     has_d = bool(cfg.get('def_col') and cfg.get('obs_col'))
 
-    det = detail[keys + ['merchant', 'anchor', 'q', 'fired', 'alert']].copy()
+    det = detail[detail['unit'] != 'ratio'][keys + ['merchant', 'anchor', 'q', 'fired', 'alert']].copy()   # ratio z rows have no q
     det['anchor'] = pd.to_datetime(det['anchor'])
     a_s, a_e = det['anchor'].min(), det['anchor'].max()
     rules = det[keys].drop_duplicates().reset_index(drop=True)

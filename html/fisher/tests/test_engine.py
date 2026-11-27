@@ -88,6 +88,7 @@ CONFIG = {
         {'name': 'big_rel', 'kind': 'rel_amount', 'level': 0.9},
         {'name': 'volume', 'kind': 'volume'},
         {'name': 'money_surge', 'kind': 'money'},
+        {'name': 'amount_ratio', 'kind': 'ratio_z', 'raw_edges': [0, 0.35, 0.55, 1, 1.96], 'std_edges': [0, 1, 2, 3]},
     ],
     'comparisons': [
         {'name': '1 vs 2-8', 'recent': [1, 1], 'base': [2, 8]},
@@ -218,6 +219,47 @@ def brute_money(pdf, cfg, a_s, a_e):
             pd.DataFrame(fam, columns=['anchor', 'comparison', 'n_tests']))
 
 
+def brute_ratio(pdf, cfg, a_s, a_e):
+    """Every ratio z value the slow way: per anchor, seller and rule, from daily amounts."""
+    pdf = pdf.assign(d=pdf['txn_date'].dt.normalize())
+    max_back = max(max(c['recent'][1], c['base'][1]) for c in cfg['comparisons'])
+    days = pd.date_range(a_s - pd.Timedelta(days=max_back - 1), a_e)
+    amt = pdf.groupby(['merchant_id', 'd'])['txn_amount'].sum().unstack(fill_value=0).reindex(columns=days, fill_value=0)
+    cnt = pdf.groupby(['merchant_id', 'd']).size().unstack(fill_value=0).reindex(columns=days, fill_value=0)
+    groups = cfg['peer_groups']
+    gval = {tuple(g): pdf.groupby('merchant_id')[g].first().astype(str).agg(' | '.join, axis=1) for g in groups}
+    z = lambda x, ref: np.arctanh(np.clip((x - ref) / (x + ref) if x + ref > 0 else 0.0, -0.999, 0.999))
+    out = []
+    for c in cfg['comparisons']:
+        (rs, re_), (bs, be) = c['recent'], c['base']
+        for t in pd.date_range(a_s, a_e):
+            rd = pd.date_range(t - pd.Timedelta(days=re_ - 1), t - pd.Timedelta(days=rs - 1))
+            bd = pd.date_range(t - pd.Timedelta(days=be - 1), t - pd.Timedelta(days=bs - 1))
+            mp = amt[rd].sum(axis=1) / len(rd); rp = amt[bd].sum(axis=1) / len(bd); nr = cnt[rd].sum(axis=1)
+            for m in amt.index:
+                if nr[m] < cfg['min_total']:
+                    continue
+                zs = z(mp[m], rp[m])
+                out.append((t, m, c['name'], 'self', None, zs, mp[m], rp[m]))
+                for g in groups:
+                    gv = gval[tuple(g)]
+                    others = [o for o in amt.index if o != m and gv[o] == gv[m] and mp[o] > 0]
+                    if len(others) < cfg['min_peers']:
+                        continue
+                    avg = mp[others].mean()
+                    zp = z(mp[m], avg); lab = '+'.join(g)
+                    out += [(t, m, c['name'], 'peer:' + lab, gv[m], zp, mp[m], avg),
+                            (t, m, c['name'], 'and:' + lab, gv[m], min(zs, zp), mp[m], np.nan),
+                            (t, m, c['name'], 'or:' + lab, gv[m], max(zs, zp), mp[m], np.nan)]
+    R = pd.DataFrame(out, columns=['anchor', 'merchant', 'comparison', 'test', 'peer_group', 'z_raw', 'mp', 'ref'])
+    def std(x):
+        med = x.median(); mad = (x - med).abs().median() * 1.4826
+        return (x - med) / mad if (len(x) >= 5 and mad > 0) else x * np.nan
+    R['gkey'] = R['peer_group'].fillna('all')
+    R['z_std'] = R.groupby(['anchor', 'comparison', 'test', 'gkey'])['z_raw'].transform(std)
+    return R
+
+
 # ---------------------------------------------------------------------------- Part B
 print('Part B: full run on local Spark')
 try:
@@ -252,7 +294,7 @@ if spark is not None:
     ref = brute(pdf, CONFIG, a_s, a_e)
     keys = ['anchor', 'merchant', 'metric', 'comparison', 'unit', 'test']
     fam_ref = ref.groupby(['anchor', 'metric', 'comparison', 'unit', 'test']).size()
-    dfi = det[det['unit'] != 'amount']                       # Fisher rows (money surge rows checked below)
+    dfi = det[~det['unit'].isin(['amount', 'ratio'])]       # Fisher rows (money surge and ratio z checked below)
     fam_eng = dfi.groupby(['anchor', 'metric', 'comparison', 'unit', 'test'])['n_tests'].first()
     j = fam_eng.to_frame('e').join(fam_ref.to_frame('r'), how='left')
     check('family sizes (gated tests per day x rule) match brute force', (j['e'] == j['r']).all(), j[j['e'] != j['r']].head())
@@ -280,6 +322,59 @@ if spark is not None:
     fm = mdet.groupby(['anchor', 'comparison'])['n_tests'].first().to_frame('e').join(mfam.set_index(['anchor', 'comparison']))
     check('  ... family sizes', (fm['e'] == fm['n_tests']).all())
     check('  ... 1-day comparison skipped', '1 vs 2-8' not in set(mdet['comparison']))
+
+    # ratio z (the picture's approach): every value vs a slow rebuild, then the band counts
+    rdet = det[det['unit'] == 'ratio']
+    R = brute_ratio(pdf, CONFIG, a_s, a_e)
+    Rup = R[R['z_raw'] > 0]
+    mr = Rup.merge(rdet, on=['anchor', 'merchant', 'comparison', 'test'], how='outer', indicator=True, suffixes=('_r', '_e'))
+    check(f'ratio z: same rows with z > 0 as the rebuild ({len(Rup):,}; self, 3 peer groups, AND, OR)',
+          len(Rup) > 500 and (mr['_merge'] == 'both').all(), mr['_merge'].value_counts().to_dict())
+    bz = mr[mr['_merge'] == 'both']
+    check('  ... z_raw, MP and reference per day match', np.allclose(bz['z_raw_r'], bz['z_raw_e'], atol=1e-9)
+          and np.allclose(bz['mp'], bz['mp_per_day']) and np.allclose(bz['ref'].fillna(-1), bz['ref_per_day'].fillna(-1)))
+    check('  ... z_std matches (median / MAD per day and group, 5+ sellers)',
+          np.allclose(bz['z_std_r'].fillna(-99), bz['z_std_e'].fillna(-99), atol=1e-9) and bz['z_std_e'].notna().any())
+    check('  ... ratio rows never fire or alert, and are not in summary or outcomes',
+          not rdet['fired'].any() and not rdet['alert'].any() and 'amount_ratio' not in set(summ['metric'])
+          and 'amount_ratio' not in set(r['outcomes']['metric']))
+    zb = r['z_bands']
+    T = pdf.assign(d=pdf['txn_date'].dt.normalize())
+    T = T[(T['d'] >= a_s) & (T['d'] <= a_e)].copy()
+    T['s'] = T['f_susp'] == 1; T['o'] = T['f_pd30_obs'] == 1; T['x'] = T['o'] & (T['f_pd30'] == 1)
+    rec = {c['name']: c['recent'] for c in CONFIG['comparisons']}
+    okz = True
+    for comp, test in [('7 vs 8-15', 'self'), ('30 vs 31-60', 'peer:seller_group'), ('1 vs 2-8', 'or:h3_9')]:
+        sub = R[(R['comparison'] == comp) & (R['test'] == test)]
+        s_, e_ = rec[comp]
+        for scale, col, edges in [('raw', 'z_raw', [0, 0.35, 0.55, 1, 1.96]), ('std', 'z_std', [0, 1, 2, 3])]:
+            best, tested = {}, set()
+            for m, t, v in zip(sub['merchant'], sub['anchor'], sub[col]):
+                for b in range(s_, e_ + 1):
+                    k = (m, t - pd.Timedelta(days=b - 1)); tested.add(k)
+                    if v == v:
+                        best[k] = max(best.get(k, -1e9), v)
+            nb = len(edges) + 1
+            band = [nb + 1 if (m, d) not in tested else (nb if (m, d) not in best else int(np.searchsorted(edges, best[(m, d)], side='right')))
+                    for m, d in zip(T['merchant_id'], T['d'])]
+            T['b'] = band
+            got = zb[(zb['metric'] == 'amount_ratio') & (zb['comparison'] == comp) & (zb['test'] == test) & (zb['scale'] == scale)].set_index('band_order')
+            for k_ in got.index:
+                w = T[T['b'] == k_]; cl = w.groupby('client_id')[['s', 'o', 'x']].any()
+                want = dict(txn=len(w), susp_txn=int(w['s'].sum()), obs_txn=int(w['o'].sum()), def_txn=int(w['x'].sum()),
+                            client=len(cl), susp_client=int(cl['s'].sum()), obs_client=int(cl['o'].sum()), def_client=int(cl['x'].sum()))
+                bad = {kk: (int(got.loc[k_, kk]), v) for kk, v in want.items() if int(got.loc[k_, kk]) != v}
+                if abs(got.loc[k_, 'amount'] - w['txn_amount'].sum()) > 0.05:
+                    bad['amount'] = (got.loc[k_, 'amount'], w['txn_amount'].sum())
+                own = sub[col]
+                sd = int(((np.searchsorted(edges, own.dropna(), side='right')) == k_).sum()) if k_ < nb else (int(own.isna().sum()) if k_ == nb else 0)
+                if int(got.loc[k_, 'seller_days']) != sd:
+                    bad['seller_days'] = (int(got.loc[k_, 'seller_days']), sd)
+                if bad:
+                    okz = False; print('   ', comp, test, scale, got.loc[k_, 'band'], bad)
+            if got['txn'].sum() != len(T):
+                okz = False; print('   bands do not add up', comp, test, scale)
+    check('z_bands = rebuild (3 rules x raw/std x every band: 8 counts, amount, seller_days; bands add up)', okz)
 
     # dates: filter the original rows with recent_start/end and ref_start/end and rebuild a, b, c, d
     pdf_f, _ = add_flags(pdf, CONFIG, a_s)
@@ -426,7 +521,10 @@ if spark is not None:
         r2 = run(df, dict(CONFIG, metrics=[m for m in CONFIG['metrics'] if m['kind'] != 'money'], units=['txn'],
                           peer_groups=[], susp_cond=None, def_col=None, obs_col=None), spark=spark)
     check('txn only, no peers, no labels: ok', r2['ok'], buf.getvalue()[-500:])
-    check('  ... only txn/self rows', set(r2['detail']['unit']) == {'txn'} and set(r2['detail']['test']) == {'self'})
+    d2 = r2['detail']; nr = d2[d2['unit'] != 'ratio']
+    check('  ... only txn/self rows', set(nr['unit']) == {'txn'} and set(nr['test']) == {'self'})
+    check('  ... ratio z without peer groups: self only, with z_bands', set(d2.loc[d2['unit'] == 'ratio', 'test']) == {'self'}
+          and set(r2['z_bands']['test']) == {'self'})
     check('  ... relative amount without peer groups: one threshold over all sellers', 'big_rel_all' in set(r2['detail']['metric']))
     check('  ... row totals without labels: txn_cnt and loan_amt only', 'txn_cnt' in r2['detail'] and 'loan_amt' in r2['detail']
           and 'susp_cnt' not in r2['detail'] and 'def_cnt' not in r2['detail'])
