@@ -156,6 +156,30 @@ The team's note proposed a different rule: compare a seller's money in the monit
 
 **How to compare it with the tests:** for the same comparison, read down `z_bands` and down `q_bands`. The approach whose top bands carry clearly higher suspicious and default rates, at a workload the team can handle, separates bad sellers better. Its main weakness is that it ignores how much data a seller has: 1M → 3M and 1B → 3B get the same z.
 
+## Worked example: the same sellers, different verdicts
+
+Six made-up sellers show where the methods disagree. All of them, plus eight normal sellers, sit in one segment (`seller_group = retail`) for 60 days, and every number below comes from the real engine. Settings: rule **7 vs 8–15** on the last day; Fisher on the **high-utilisation** flag (normal share about 10%); peers = the seller group; gate 10 transactions and 5 flagged.
+
+| Seller | What happened | Fisher, self, by transaction | Fisher, self, by customer | Fisher, peers, by customer | Money surge | Ratio Z, self (raw z / std z) | Ratio Z, peers (raw z) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| S1 small seller | 1M a day, then one 28M payment | not tested (under 5 flagged) | not tested | not tested | q 0.49, **no** | **0.80 (5×) / 14.0** | below 0 |
+| S2 big seller | 500M a day, steadily +30% | q 0.52, no | q 0.56, no | share not higher | **q 0.001, fires** | 0.13 (1.3×) / 2.2 | **1.75 (33× the average seller)** |
+| S3 few customers | 2 high-risk customers make 50 payments in 7 days | **50% vs 6%, q < 0.001, fires** | 18% vs 7%, q 0.20, no | q 0.78, no | **q 0.001, fires** | 0.27 (1.7×) / 4.6 | below 0 |
+| S4 always bad | 60% high-risk customers from day one | 69% vs 49%, q 0.054, no | q 0.17, no | **71% vs 11%, q < 0.001, fires** | no rise | about 0 | about 0 |
+| S5 new seller | first sale 5 days ago | not tested (no history, 3 flagged) | not tested | not tested (under 5 flagged) | **q 0.014, fires** | **3.80 (capped) / 66.5** | below 0 |
+| S6 normal | nothing changed | no rise | no rise | no rise | no rise | about 0 | about 0 |
+
+**What each row shows:**
+
+- **S1:** Ratio Z ranks a tiny seller near the top because one payment made its average 5× higher. The money surge test sees one unusual day out of seven and does not fire: one payment is weak evidence.
+- **S2:** Steady growth every day is strong evidence for the money surge test, though the ratio is only 1.3×. Ratio Z against peers calls it 33× the average seller, but that is its normal size, not a change: the peer ratio measures level.
+- **S3:** The flag rule fires when counting transactions but not customers: 50 payments from 2 people. Which is right depends on whether repeat payments are the fraud pattern.
+- **S4:** No self test fires, because nothing changed. Only the peer test catches a seller that has been bad all along.
+- **S5:** A seller with no history has nothing for a self test to compare with, and too few flagged customers to test. The money surge test fires, and Ratio Z hits its cap (z = 3.8).
+- **S6:** Every method stays quiet.
+
+Standardised z values are large here (14, 30, 66) because the eight normal sellers are very alike, so their spread is small. In real data the spread is wider and the numbers smaller.
+
 ## Design choices and limitations
 
 **Choices a reviewer may question:**
