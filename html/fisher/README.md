@@ -1,5 +1,7 @@
 # Fisher Backtest Builder
 
+How the method works and why: [METHOD.md](METHOD.md).
+
 Open `fisher_backtest_builder.html` in Chrome, on a computer or a phone. Declare your columns, metrics and comparisons, and it writes **one `.py` file** that backtests Fisher-test triggers for sellers receiving suspiciously more BNPL money.
 
 The page works offline and nothing is uploaded. Your settings are saved in the browser, with Export and Import settings (Merge or Replace).
